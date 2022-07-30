@@ -250,7 +250,7 @@ def plot_Expansion(decoder_model, plot):
     plots=[]
     
     for logit in logits:
-        plots.append(tokenizer.decode(tf.argmax(logit,axis=2))
+        plots.append(tokenizer.decode(tf.argmax(logit,axis=2)))
 
     return logits,plots
 
@@ -263,7 +263,7 @@ def make_Plot(encoder_model,higher_plot):
     plots=[]
     
     for logit in logits:
-        plots.append(tokenizer.decode(tf.argmax(logit,axis=2))
+        plots.append(tokenizer.decode(tf.argmax(logit,axis=2)))
     
     return logits,plots
 
