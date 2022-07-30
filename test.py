@@ -9,7 +9,7 @@ tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
 
 MAX_VOCAB = len(tokenizer.get_vocab())+1
 print('VOCAB_SIZE :',  MAX_VOCAB)
-BATCH_SIZE=64
+BATCH_SIZE=8
 
 
 def tokenize_function(examples):
@@ -18,7 +18,7 @@ def tokenize_function(examples):
 tokenized_datasets = dataset.map(tokenize_function, batched=True)
 
 small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
-small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(10))
+small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(30))
 
 from transformers import DefaultDataCollator
 
@@ -157,8 +157,8 @@ my_bart_decoder = My_Decoder_BART(
     #tokenizers.pt.get_vocab_size().numpy(),
     rate=0.1)
 #print(inputs["input_ids"])
-print(my_bart_encoder({'input_ids' : inputs["input_ids"], 'decoder_input_ids' : outputs["input_ids"]}).shape)
-print(my_bart_decoder([tf.random.uniform((1, 57,MAX_VOCAB), dtype=tf.int32, minval=0, maxval=200),tf.random.uniform((1, 768), dtype=tf.int32, minval=0, maxval=200)]).shape)
+#print(my_bart_encoder({'input_ids' : inputs["input_ids"], 'decoder_input_ids' : outputs["input_ids"]}).shape)
+#print(my_bart_decoder([tf.random.uniform((1, 57,MAX_VOCAB), dtype=tf.int32, minval=0, maxval=200),tf.random.uniform((1, 768), dtype=tf.int32, minval=0, maxval=200)]).shape)
 
 summary_optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
@@ -189,32 +189,32 @@ train_reconstruction_accuracy=tf.keras.metrics.Mean(name='train_reconstruction_a
 # @tf.function
 def train_step(inp, summary):
 
-  with tf.GradientTape(persistent=True) as tape:
-    output= my_bart_encoder({'input_ids' : inp, 'decoder_input_ids' : summary})
-    loss = summary_loss(summary, output) 
-    fake_input_predictions = my_bart_decoder([output,inp])
-    recon_loss = reconstruction_loss(inp,fake_input_predictions)
-    total_loss=alpha*loss+(1-alpha)*recon_loss #total loss를 tape scope안에서 구해야 함.
+    with tf.GradientTape(persistent=True) as tape:
+        output= my_bart_encoder({'input_ids' : inp, 'decoder_input_ids' : summary})
+        loss = summary_loss(summary, output) 
+        fake_input_predictions = my_bart_decoder([output,inp])
+        recon_loss = reconstruction_loss(inp,fake_input_predictions)
+        total_loss=alpha*loss+(1-alpha)*recon_loss #total loss를 tape scope안에서 구해야 함.
   
-  summary_gradients = tape.gradient(total_loss, my_bart_encoder.trainable_variables)
-  reconstruction_gradients=tape.gradient(recon_loss,my_bart_decoder.trainable_variables)
+    summary_gradients = tape.gradient(total_loss, my_bart_encoder.trainable_variables)
+    reconstruction_gradients=tape.gradient(recon_loss,my_bart_decoder.trainable_variables)
   
-  summary_optimizer.apply_gradients(zip(summary_gradients, my_bart_encoder.trainable_variables))
-  reconstruction_optimizer.apply_gradients(zip(reconstruction_gradients,my_bart_decoder.trainable_variables))
+    summary_optimizer.apply_gradients(zip(summary_gradients, my_bart_encoder.trainable_variables))
+    reconstruction_optimizer.apply_gradients(zip(reconstruction_gradients,my_bart_decoder.trainable_variables))
   
-  train_summary_loss(loss)
-  train_reconstruction_loss(recon_loss)
-  train_summary_accuracy(summary_accuracy_function(summary, output))
-  train_reconstruction_accuracy(reconstruction_accuracy_function(inp, fake_input_predictions))
+    train_summary_loss(loss)
+    train_reconstruction_loss(recon_loss)
+    train_summary_accuracy(summary_accuracy_function(summary, output))
+    train_reconstruction_accuracy(reconstruction_accuracy_function(inp, fake_input_predictions))
 
 #train_step(inputs, outputs) # 예시.
 
 
-# for (batch, set) in enumerate(tf_train_dataset):
-#     print(batch)
-#     train_step(set[0]['input_ids'], set[0]['decoder_input_ids'])
-#     print(train_summary_loss.result())
-#     print(train_reconstruction_loss.result())
+#for (batch, set) in enumerate(tf_train_dataset):
+#    print(batch)
+#    train_step(set[0]['input_ids'], set[0]['decoder_input_ids'])
+#    print(train_summary_loss.result())
+#    print(train_reconstruction_loss.result())
 #     if(batch==100):
 #         break #예시.
 
@@ -241,23 +241,41 @@ def train_step(inp, summary):
 #     print(f'Epoch {epoch + 1} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}')
 #     print(f'Time taken for 1 epoch: {time.time() - start:.2f} secs\n')
 
-def Plot_Expansion(decoder_model, plot):
-    logits=decoder_model({'input_ids' : plot}).logits
-    return logits,tokenizer.decode(tf.squeeze(tf.argmax(logits,axis=2)))
+def plot_Expansion(decoder_model, plot):
+    logits = []
+    
+    for p in plot:
+        logits.append(decoder_model({'input_ids' : tf.expand_dims(p,axis=0)}))
+    
+    plots=[]
+    
+    for logit in logits:
+        plots.append(tokenizer.decode(tf.argmax(logit,axis=2))
 
-def Make_Plot(encoder_model,higher_plot):
-    logits=encoder_model({'input_ids' : higher_plot}).logits
-    return logits, tokenizer.decode(tf.squeeze(tf.argmax(logits,axis=2)))
+    return logits,plots
+
+def make_Plot(encoder_model,higher_plot):
+    logits = []
+    
+    for p in higher_plot:
+        logits.append(encoder_model({'input_ids' : tf.expand_dims(p,axis=0)}))
+    
+    plots=[]
+    
+    for logit in logits:
+        plots.append(tokenizer.decode(tf.argmax(logit,axis=2))
+    
+    return logits,plots
 
 
 # #    inp -> long sentences, tar -> summary
-# for (batch, set) in enumerate(tf_validation_dataset):
-#     print(batch)
-#     plot_logits,summary=Make_Plot(my_bart_encoder,set[0]['input_ids'])
-#     exp_logits,expansion=Plot_Expansion(my_bart_decoder,summary)
-#     if batch % 50 == 0:
-#         print(f'Batch {batch} Summary Loss ' + str(summary_loss(set[0]['decoder_input_ids'],plot_logits)) +  "Recon Loss " + str(reconstruction_loss(set[0]['input_ids'],exp_logits)))
-#         print(f'Batch {batch} Summary Accuracy ' + str(summary_accuracy_function(set[0]['decoder_input_ids'],plot_logits)) + 'Accuracy ' + str(reconstruction_accuracy_function(set[0]['input_ids'],exp_logits)))
+for (batch, set) in enumerate(tf_validation_dataset):
+    print(batch)
+    plot_logits,summary=make_Plot(my_bart_encoder,set[0]['input_ids'])
+    exp_logits,expansion=plot_Expansion(my_bart_decoder,summary)
+    if batch % 10 == 0:
+        print(f'Batch {batch} Summary Loss ' + str(summary_loss(set[0]['decoder_input_ids'],plot_logits)) +  "Recon Loss " + str(reconstruction_loss(set[0]['input_ids'],exp_logits)))
+        print(f'Batch {batch} Summary Accuracy ' + str(summary_accuracy_function(set[0]['decoder_input_ids'],plot_logits)) + 'Accuracy ' + str(reconstruction_accuracy_function(set[0]['input_ids'],exp_logits)))
 
 
 
