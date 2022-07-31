@@ -1,24 +1,31 @@
 from datasets import load_dataset
 import time
+import tensorflow as tf
+import os
+#tf.config.set_visible_devices([], 'GPU')
+
 dataset = load_dataset("cnn_dailymail", '3.0.0') # cnn dailymail로 했지만 다른 데이터도 같은 데이터 형식(dictionary, "long" : ~, "short" : ~)
 # print(dataset["train"][100]['highlights'])
 # print(dataset["train"][100]['article'])
 
-from transformers import BartTokenizer
-tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+
+from transformers import BartTokenizer,T5Tokenizer
+tokenizer = T5Tokenizer.from_pretrained("t5-small",model_max_length=1024)
 
 MAX_VOCAB = len(tokenizer.get_vocab())+1
 print('VOCAB_SIZE :',  MAX_VOCAB)
-BATCH_SIZE=4
+BATCH_SIZE=2
 
 
 def tokenize_function(examples):
-    return {'input_ids' : tokenizer(examples["article"], padding="max_length", truncation=True)['input_ids'],'decoder_input_ids' : tokenizer(examples["highlights"], padding="max_length", truncation=True)['input_ids']}
+    return {'input_ids' : tokenizer(examples["article"],max_length=1024, padding='longest', truncation=True)['input_ids'],'decoder_input_ids' : tokenizer(examples["highlights"], max_length=1024, padding='longest', truncation=True)['input_ids']}
 
 tokenized_datasets = dataset.map(tokenize_function, batched=True)
 
 small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
 small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(30))
+
+print(small_train_dataset)
 
 from transformers import DefaultDataCollator
 
@@ -43,10 +50,23 @@ tf_validation_dataset = small_eval_dataset.to_tf_dataset(
 
 # print(tf_train_dataset)
 
+#os.environ["CUDA_VISIBLE_DEVICES"]='1'
+#physical_devices = tf.config.list_physical_devices('GPU')
+#print("Num GPUs:", len(physical_devices))
+#CUDA_VISIBLE_DEVICES=""
+#os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
-import tensorflow as tf
-from transformers import TFAutoModel,BartModel,TFBartForConditionalGeneration
-bart_model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
+#TF_GPU_ALLOCATOR=cuda_malloc_async
+#tf.compat.v1.disable_eager_execution()
+#mirrored_strategy = tf.distribute.MirroredStrategy(devices=["/gpu:0", "/gpu:1"])
+#config = tf.compat.v1.ConfigProto()
+#config.gpu_options.allow_growth = True
+#session = tf.compat.v1.Session(config=config)
+#os.putenv('TF_GPU_ALLOCATOR', 'cuda_malloc_async')
+
+#from transformers import TFAutoModel,BartModel,TFBartForConditionalGeneration
+from transformers import TFT5ForConditionalGeneration
+bart_model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
 inputs=tokenizer(dataset["train"][100]['article'], truncation=True,return_tensors="tf")
 outputs=tokenizer(dataset["train"][100]['highlights'], truncation=True,return_tensors="tf")
 # print(inputs)
@@ -57,7 +77,7 @@ outputs=tokenizer(dataset["train"][100]['highlights'], truncation=True,return_te
 # made=tokenizer.decode(tf.squeeze(tf.argmax(bart_model({'input_ids' : inputs["input_ids"], 'decoder_input_ids' : outputs["input_ids"]}).logits,axis=2)))
 # print("made summary : "+ made)
 # print("length : "+str(len(made)))
-decoder_bart_model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-base")
+decoder_bart_model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
 # made_2=tokenizer.decode(tf.squeeze(tf.argmax(decoder_bart_model({'input_ids' : outputs["input_ids"], 'decoder_input_ids' : inputs["input_ids"]}).logits,axis=2)))
 # print("decoded artice : " + made_2)
 # print("length :"+str(len(made_2)))
@@ -118,12 +138,14 @@ class My_Decoder_BART(tf.keras.Model):
 
     def call(self, inputs, training):
     # Keras models prefer if you pass all your inputs in the first argument
-        encoder_output,input=inputs
+        encoder_output,inp=inputs
         
         #bart_output=self.bart_model({'inputs_embeds' : embedding, 'decoder_input_ids' : input}).last_hidden_state # last hidden state를 하지 않으면 모든 hidden state가 전부 반환됨.
         if(training):
             embedding=self.input_layer(encoder_output)
-            bart_output=self.bart_model({'inputs_embeds' : embedding, 'decoder_input_ids' : input}).logits # conditional generation은 logits이 last hidden state를 대체함.
+            #print(input)
+            #bart_output=self.bart_model(decoder_input_ids=inp,inputs_embeds=embedding)
+            bart_output=self.bart_model({'inputs_embeds' : embedding, 'decoder_input_ids' : inp}).logits # conditional generation은 logits이 last hidden state를 대체함.
         # input을 id가 아니라 임베딩 차원으로 넣어줄 수 있는 기능이 있다. 그런데 이렇게 하면 decoder를 id로 넣어줘도 되는건지 확실치않음.
         else:
             bart_output=self.bart_model({'input_ids' : encoder_output}).logits #decoder input id가 없으면 무조건 ids로만 가능하댄다.
@@ -152,10 +174,14 @@ my_bart_encoder = My_Encoder_BART(
     vocab_size=MAX_VOCAB,
     #tokenizers.pt.get_vocab_size().numpy(),
     rate=0.1)
+
+BART_BASE_DIM=768
+BART_LARGE_DIM=1024
+T5_SMALL_DIM=512
 my_bart_decoder = My_Decoder_BART(
     model=bart_model,
     vocab_size=MAX_VOCAB,
-    dim=1024,
+    dim=T5_SMALL_DIM,
     #tokenizers.pt.get_vocab_size().numpy(),
     rate=0.1)
 #print(inputs["input_ids"])
@@ -231,15 +257,15 @@ for epoch in range(EPOCHS):
 
 # # #    inp -> long sentences, tar -> summary
     for (batch, set) in enumerate(tf_train_dataset):
-        print(batch)
+        print("batch : "+str(batch))
         train_step(set[0]['input_ids'], set[0]['decoder_input_ids'])
         if batch % 50 == 0:
             print(f'Epoch {epoch + 1} Batch {batch} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f}')
             print(f'Epoch {epoch + 1} Batch {batch} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}')
 
-    if (epoch + 1) % 5 == 0:
-        ckpt_save_path = ckpt_manager.save()
-        print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
+    
+    ckpt_save_path = ckpt_manager.save()
+    print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
 
     print(f'Epoch {epoch + 1} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f}')
     print(f'Epoch {epoch + 1} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}')
