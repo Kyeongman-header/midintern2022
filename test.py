@@ -16,16 +16,16 @@ tokenizer = T5Tokenizer.from_pretrained("t5-small",model_max_length=1024)
 MAX_VOCAB = len(tokenizer.get_vocab())+1
 print('VOCAB_SIZE :',  MAX_VOCAB)
 BATCH_SIZE=2
-LONG_MAX=800
-SHORT_MAX=60
+LONG_MAX=1024
+SHORT_MAX=100
 
 def tokenize_function(examples):
     return {'input_ids' : tokenizer(examples["article"],max_length=LONG_MAX, padding='max_length', truncation=True)['input_ids'],'decoder_input_ids' : tokenizer(examples["highlights"], max_length=SHORT_MAX, padding='max_length', truncation=True)['input_ids']}
 
 tokenized_datasets = dataset.map(tokenize_function, batched=True)
 
-small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
-small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(30))
+small_train_dataset = tokenized_datasets["train"].shuffle(seed=42)
+small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(10000))
 
 print(small_train_dataset)
 
