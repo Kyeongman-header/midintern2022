@@ -206,6 +206,8 @@ train_reconstruction_accuracy=tf.keras.metrics.Mean(name='train_reconstruction_a
 #print(my_bart_encoder.trainable_variables)
 #print(my_bart_decoder.trainable_variables)
 # @tf.function
+
+
 def train_step(inp, summary):
     with tf.GradientTape(persistent=True) as tape:
 
@@ -238,7 +240,10 @@ def train_step(inp, summary):
 #    if(batch==100):
 #        break #예시.
 
-for epoch in range(EPOCHS):
+from tqdm import tqdm
+from tqdm import trange
+
+for epoch in trange(EPOCHS):
     start = time.time()
     train_summary_loss.reset_states()
     train_summary_accuracy.reset_states()
@@ -246,13 +251,11 @@ for epoch in range(EPOCHS):
     train_reconstruction_accuracy.reset_states()
 
 # # #    inp -> long sentences, tar -> summary
-    for (batch, set) in enumerate(tf_train_dataset):
+    for (batch, set) in tqdm(enumerate(tf_train_dataset)):
         print("batch : "+str(batch))
         train_step(set[0]['input_ids'], set[0]['decoder_input_ids'])
-        if batch % 50 == 0:
-            print(f'Epoch {epoch + 1} Batch {batch} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f}')
-            print(f'Epoch {epoch + 1} Batch {batch} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}')
-
+        if batch % 1000 == 0:
+            print(f'\rEpoch {epoch + 1} Batch {batch} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}', end='')
     
     ckpt_save_path = ckpt_manager.save()
     print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
