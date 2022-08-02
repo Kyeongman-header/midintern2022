@@ -243,27 +243,27 @@ def train_step(inp, summary):
 from tqdm import tqdm
 from tqdm import trange
 
-for epoch in trange(EPOCHS):
-    start = time.time()
-    train_summary_loss.reset_states()
-    train_summary_accuracy.reset_states()
-    train_reconstruction_loss.reset_states()
-    train_reconstruction_accuracy.reset_states()
-    print("")
+# for epoch in trange(EPOCHS):
+#     start = time.time()
+#     train_summary_loss.reset_states()
+#     train_summary_accuracy.reset_states()
+#     train_reconstruction_loss.reset_states()
+#     train_reconstruction_accuracy.reset_states()
+#     print("")
 
-# # #    inp -> long sentences, tar -> summary
-    for (batch, set) in enumerate(tqdm(tf_train_dataset)):
-        #print("batch : "+str(batch))
-        train_step(set[0]['input_ids'], set[0]['decoder_input_ids'])
-        if batch % 1000 ==0 and batch!=0:
-            print(f'\rEpoch {epoch + 1} Batch {batch} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}', end='')
+# # # #    inp -> long sentences, tar -> summary
+#     for (batch, set) in enumerate(tqdm(tf_train_dataset)):
+#         #print("batch : "+str(batch))
+#         train_step(set[0]['input_ids'], set[0]['decoder_input_ids'])
+#         if batch % 1000 ==0 and batch!=0:
+#             print(f'\rEpoch {epoch + 1} Batch {batch} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}', end='')
     
-    ckpt_save_path = ckpt_manager.save()
-    print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
+#     ckpt_save_path = ckpt_manager.save()
+#     print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
 
-    print(f'Epoch {epoch + 1} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f}')
-    print(f'Epoch {epoch + 1} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}')
-    print(f'Time taken for 1 epoch: {time.time() - start:.2f} secs\n')
+#     print(f'Epoch {epoch + 1} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f}')
+#     print(f'Epoch {epoch + 1} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}')
+#     print(f'Time taken for 1 epoch: {time.time() - start:.2f} secs\n')
 
 def plot_Expansion(decoder_model, plot):
     #logits = []
@@ -300,12 +300,11 @@ def make_Plot(encoder_model,higher_plot):
 
 
 # #    inp -> long sentences, tar -> summary
-for (batch, set) in enumerate(tf_validation_dataset):
+for (batch, set) in enumerate(tqdm(tf_validation_dataset)):
     plot_logits,tokenize_summary,summary=make_Plot(my_bart_encoder,set[0]['input_ids'])
     exp_logits,expansion=plot_Expansion(my_bart_decoder,tokenize_summary)
-    #if batch % 10 == 0:
-    print(f'Batch {batch} Summary Loss ' + str(summary_loss(set[0]['decoder_input_ids'],plot_logits)) +  " Recon Loss " + str(reconstruction_loss(set[0]['input_ids'],exp_logits)))
-    print(f'Batch {batch} Summary Accuracy ' + str(summary_accuracy_function(set[0]['decoder_input_ids'],plot_logits)) + ' Accuracy ' + str(reconstruction_accuracy_function(set[0]['input_ids'],exp_logits)))
+    if batch % 10 == 0:
+        print(f'\rBatch {batch} Summary Loss ' + str(summary_loss(set[0]['decoder_input_ids'],plot_logits)) +  " Recon Loss " + str(reconstruction_loss(set[0]['input_ids'],exp_logits)) + 'Summary Accuracy : ' + str(summary_accuracy_function(set[0]['decoder_input_ids'],plot_logits)) + 'Recons Accuracy ' + str(reconstruction_accuracy_function(set[0]['input_ids'],exp_logits)), end="") 
 
 
 
