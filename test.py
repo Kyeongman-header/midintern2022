@@ -249,12 +249,13 @@ for epoch in trange(EPOCHS):
     train_summary_accuracy.reset_states()
     train_reconstruction_loss.reset_states()
     train_reconstruction_accuracy.reset_states()
+    print("")
 
 # # #    inp -> long sentences, tar -> summary
-    for (batch, set) in tqdm(enumerate(tf_train_dataset)):
-        print("batch : "+str(batch))
+    for (batch, set) in enumerate(tqdm(tf_train_dataset)):
+        #print("batch : "+str(batch))
         train_step(set[0]['input_ids'], set[0]['decoder_input_ids'])
-        if batch % 1000 == 0:
+        if batch % 1000 ==0 and batch!=0:
             print(f'\rEpoch {epoch + 1} Batch {batch} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}', end='')
     
     ckpt_save_path = ckpt_manager.save()
