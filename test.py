@@ -130,7 +130,7 @@ class My_Decoder_BART(tf.keras.Model):
     # Keras models prefer if you pass all your inputs in the first argument
         encoder_output,inp=inputs
         
-        #bart_output=self.bart_model({'inputs_embeds' : embedding, 'decoder_input_ids' : input}).last_hidden_state # last hidden state를 하지 않으면 모든 hidden state가 전부 반환됨.
+        #bart_output=self.bart_model({'inputs_embeds' : embedding, 'decoder_input_ids' : input}).last_hidden_state #ㅑ last hidden state를 하지 않으면 모든 hidden state가 전부 반환됨.
         if(training):
             embedding=self.input_layer(encoder_output)
             #print(input)
@@ -138,7 +138,9 @@ class My_Decoder_BART(tf.keras.Model):
             bart_output=self.bart_model({'inputs_embeds' : embedding, 'decoder_input_ids' : inp}).logits # conditional generation은 logits이 last hidden state를 대체함.
         # input을 id가 아니라 임베딩 차원으로 넣어줄 수 있는 기능이 있다. 그런데 이렇게 하면 decoder를 id로 넣어줘도 되는건지 확실치않음.
         else:
-            bart_output=self.bart_model({'input_ids' : encoder_output}).logits #decoder input id가 없으면 무조건 ids로만 가능하댄다.
+            #bart_output=self.bart_model({'input_ids' : encoder_output, 'decoder_input_ids' : inp}).logits #decoder input id가 없으면 무조건 ids로만 가능하댄다.
+            bart_output=self.bart_model.generate(encoder_output)#이는 teacher forcing이 적용되지 않은, real output이다(loss 계산 불가)
+            
         #dropout=self.dropout(bart_output)
         #final_output = self.final_layer(dropout)  # (batch_size, tar_seq_len, target_vocab_size)
         return bart_output
@@ -154,7 +156,10 @@ class My_Encoder_BART(tf.keras.Model):
     def call(self, inputs, training):
     # Keras models prefer if you pass all your inputs in the first argument
         #bart_output=self.bart_model(inputs).last_hidden_state
-        bart_output=self.bart_model(inputs).logits
+        if training is True:
+            bart_output=self.bart_model(inputs).logits # 왜인지 모르겠지만 얘는 되는데 decoder는 같은 코드가 실행이 안됨
+        else:
+            bart_output=self.bart_model.generate(inputs['input_ids'])
         #dropout=self.dropout(bart_output)
         #final_output = self.final_layer(dropout)  # (batch_size, tar_seq_len, target_vocab_size)
         return bart_output
@@ -177,7 +182,7 @@ my_bart_decoder = My_Decoder_BART(
 #print(inputs["input_ids"])
 #print(my_bart_encoder({'input_ids' : inputs["input_ids"], 'decoder_input_ids' : outputs["input_ids"]}).shape)
 #print("test")
-#print(my_bart_decoder([tf.random.uniform((5, 57), dtype=tf.int32, minval=0, maxval=200),tf.random.uniform((5, 768), dtype=tf.int32, minval=0, maxval=200)],training=False).shape)
+print(my_bart_decoder([tf.random.uniform((5, 57), dtype=tf.int32, minval=0, maxval=200),tf.random.uniform((5, 768), dtype=tf.int32, minval=0, maxval=200)],training=False).shape)
 
 summary_optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
@@ -211,10 +216,10 @@ train_reconstruction_accuracy=tf.keras.metrics.Mean(name='train_reconstruction_a
 def train_step(inp, summary):
     with tf.GradientTape(persistent=True) as tape:
 
-        output= my_bart_encoder({'input_ids' : inp, 'decoder_input_ids' : summary})
+        output,_= my_bart_encoder({'input_ids' : inp, 'decoder_input_ids' : summary})
         #print(output)
         loss = summary_loss(summary, output) 
-        fake_input_predictions = my_bart_decoder([output,inp],training=True)
+        fake_input_predictions,_ = my_bart_decoder([output,inp],training=True)
         recon_loss = reconstruction_loss(inp,fake_input_predictions)
         total_loss=alpha*loss+(1-alpha)*recon_loss #total loss를 tape scope안에서 구해야 함.
   
@@ -274,7 +279,8 @@ def plot_Expansion(decoder_model, plot):
     
     plots=[]
     #print(logits)
-    tokenize_plots=tf.argmax(logits,axis=2,output_type=tf.int64)
+    #tokenize_plots=tf.argmax(logits,axis=2,output_type=tf.int64)
+    tokenize_plots=logits # 얘는 generate으로 생성한 거임. 왜 encoder와 decoder가 실행 방식이 다른지는 모르겟음
     for token in tokenize_plots:
         plots.append(tokenizer.decode(token))
 
@@ -282,14 +288,15 @@ def plot_Expansion(decoder_model, plot):
 
 def make_Plot(encoder_model,higher_plot):
     #logits = []
-    logits=encoder_model({'input_ids':higher_plot})
+    logits=encoder_model({'input_ids':higher_plot},training=False)
     #for p in higher_plot:
     #    logits.append(encoder_model({'input_ids' : tf.expand_dims(p,axis=0)}))
     
     plots=[]
     #tokenize_plots=[]
     #print(logits)
-    tokenize_plots=tf.argmax(logits,axis=2,output_type=tf.int64)
+    #tokenize_plots=tf.argmax(logits,axis=2,output_type=tf.int64)
+    tokenize_plots=logits
     for token in tokenize_plots:
         #print(logit)
         #print(tf.argmax(logit,axis=2))
@@ -298,13 +305,19 @@ def make_Plot(encoder_model,higher_plot):
     
     return logits,tokenize_plots,plots
 
-
+import csv
+f= open('valid data result', 'w', newline='')
+wr=csv.writer(f)
+wr.writerow(['orig_article','orig_summary','gen_article','gen_summary'])
 # #    inp -> long sentences, tar -> summary
 for (batch, set) in enumerate(tqdm(tf_validation_dataset)):
     plot_logits,tokenize_summary,summary=make_Plot(my_bart_encoder,set[0]['input_ids'])
     exp_logits,expansion=plot_Expansion(my_bart_decoder,tokenize_summary)
-    if batch % 10 == 0:
-        print(f'\rBatch {batch} Summary Loss ' + str(summary_loss(set[0]['decoder_input_ids'],plot_logits)) +  " Recon Loss " + str(reconstruction_loss(set[0]['input_ids'],exp_logits)) + 'Summary Accuracy : ' + str(summary_accuracy_function(set[0]['decoder_input_ids'],plot_logits)) + 'Recons Accuracy ' + str(reconstruction_accuracy_function(set[0]['input_ids'],exp_logits)), end="") 
+    for i in range(BATCH_SIZE):
+        wr.writerow([set[0]['input_ids'][i],set[0]['decoder_input_ids'][i],expansion[i],summary[i]])
+    
+    #if batch % 5 == 0:
+    #    print(f'\rBatch {batch} Summary Loss ' + str(summary_loss(set[0]['decoder_input_ids'],plot_logits)) +  " Recon Loss " + str(reconstruction_loss(set[0]['input_ids'],exp_logits)) + 'Summary Accuracy : ' + str(summary_accuracy_function(set[0]['decoder_input_ids'],plot_logits)) + 'Recons Accuracy ' + str(reconstruction_accuracy_function(set[0]['input_ids'],exp_logits)), end="") 
 
 
 
