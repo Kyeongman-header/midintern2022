@@ -2,21 +2,30 @@ from datasets import load_dataset
 import time
 import tensorflow as tf
 import os
-#tf.config.set_visible_devices([], 'GPU')
+#tf.debugging.set_log_device_placement(True)
+#tf.config.set_visible_devices([], 'GPU') # CPU로 학습하기.
+
+def createFolder(directory):
+        try:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+        except OSError:
+            print('Error Creating directory. ' + directory)
+
 
 dataset = load_dataset("cnn_dailymail", '3.0.0') # cnn dailymail로 했지만 다른 데이터도 같은 데이터 형식(dictionary, "long" : ~, "short" : ~)
 # print(dataset["train"][100]['highlights'])
 # print(dataset["train"][100]['article'])
 
-print()
+
 
 from transformers import BartTokenizer,T5Tokenizer
 tokenizer = T5Tokenizer.from_pretrained("t5-small",model_max_length=1024)
 
 MAX_VOCAB = len(tokenizer.get_vocab())+1
 print('VOCAB_SIZE :',  MAX_VOCAB)
-BATCH_SIZE=2
-LONG_MAX=1024
+BATCH_SIZE=4
+LONG_MAX=1000
 SHORT_MAX=100
 
 def tokenize_function(examples):
@@ -25,9 +34,9 @@ def tokenize_function(examples):
 tokenized_datasets = dataset.map(tokenize_function, batched=True)
 
 small_train_dataset = tokenized_datasets["train"].shuffle(seed=42)
-small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(10000))
+small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000))
 
-print(small_train_dataset)
+#print(small_train_dataset)
 
 from transformers import DefaultDataCollator
 
@@ -41,7 +50,7 @@ tf_train_dataset = small_train_dataset.to_tf_dataset(
     batch_size=BATCH_SIZE,
 ) # train dataset을 batch 사이즈별로 제공해줌.
 
-print(tf_train_dataset)
+#print(tf_train_dataset)
 
 tf_validation_dataset = small_eval_dataset.to_tf_dataset(
     columns=['input_ids', 'decoder_input_ids'],
@@ -115,8 +124,6 @@ def reconstruction_accuracy_function(real, pred):
   mask = tf.cast(mask, dtype=tf.float32)
   return tf.reduce_sum(accuracies)/tf.reduce_sum(mask)
 
-alpha=0.4
-
 class My_Decoder_BART(tf.keras.Model):
     def __init__(self, model,dim,vocab_size,rate=0.1):
         super().__init__()
@@ -135,7 +142,7 @@ class My_Decoder_BART(tf.keras.Model):
             embedding=self.input_layer(encoder_output)
             #print(input)
             #bart_output=self.bart_model(decoder_input_ids=inp,inputs_embeds=embedding)
-            bart_output=self.bart_model({'inputs_embeds' : embedding, 'decoder_input_ids' : inp}).logits # conditional generation은 logits이 last hidden state를 대체함.
+            bart_output=self.bart_model({'inputs_embeds' : embedding, 'decoder_input_ids' : inp,'training':True}).logits # conditional generation은 logits이 last hidden state를 대체함.
         # input을 id가 아니라 임베딩 차원으로 넣어줄 수 있는 기능이 있다. 그런데 이렇게 하면 decoder를 id로 넣어줘도 되는건지 확실치않음.
         else:
             #bart_output=self.bart_model({'input_ids' : encoder_output, 'decoder_input_ids' : inp}).logits #decoder input id가 없으면 무조건 ids로만 가능하댄다.
@@ -157,13 +164,23 @@ class My_Encoder_BART(tf.keras.Model):
     # Keras models prefer if you pass all your inputs in the first argument
         #bart_output=self.bart_model(inputs).last_hidden_state
         if training is True:
+            #print(inputs)
             bart_output=self.bart_model(inputs).logits # 왜인지 모르겠지만 얘는 되는데 decoder는 같은 코드가 실행이 안됨
+            #print("call shape " + str(bart_output.shape))
         else:
             bart_output=self.bart_model.generate(inputs['input_ids'])
         #dropout=self.dropout(bart_output)
         #final_output = self.final_layer(dropout)  # (batch_size, tar_seq_len, target_vocab_size)
         return bart_output
         #return final_output
+
+
+mirrored_strategy = tf.distribute.MirroredStrategy()
+gpus = tf.config.experimental.list_logical_devices('GPU')
+
+print(gpus[0].name)
+print(gpus[1].name)
+#with tf.device(gpus[0].name):
 my_bart_encoder = My_Encoder_BART(
     model=bart_model,
     vocab_size=MAX_VOCAB,
@@ -173,6 +190,7 @@ my_bart_encoder = My_Encoder_BART(
 BART_BASE_DIM=768
 BART_LARGE_DIM=1024
 T5_SMALL_DIM=512
+#with tf.device(gpus[1].name):
 my_bart_decoder = My_Decoder_BART(
     model=bart_model,
     vocab_size=MAX_VOCAB,
@@ -182,24 +200,33 @@ my_bart_decoder = My_Decoder_BART(
 #print(inputs["input_ids"])
 #print(my_bart_encoder({'input_ids' : inputs["input_ids"], 'decoder_input_ids' : outputs["input_ids"]}).shape)
 #print("test")
-print(my_bart_decoder([tf.random.uniform((5, 57), dtype=tf.int32, minval=0, maxval=200),tf.random.uniform((5, 768), dtype=tf.int32, minval=0, maxval=200)],training=False).shape)
+#print(my_bart_decoder([tf.random.uniform((5, 57), dtype=tf.int32, minval=0, maxval=200),tf.random.uniform((5, 768), dtype=tf.int32, minval=0, maxval=200)],training=False).shape)
 
-summary_optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98,
+LEARNING_RATE=0.0001 # 0.0001 보다 크면, 학습이 제대로 되지 않는다!!
+
+summary_optimizer = tf.keras.optimizers.Adam(LEARNING_RATE, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
-reconstruction_optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98,
+reconstruction_optimizer = tf.keras.optimizers.Adam(LEARNING_RATE, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
 
-checkpoint_path = "./MY_checkpoints/train"
+alpha=0.85
+
+checkpoint_path = "./MY_checkpoints/train_"+str(alpha)
 
 ckpt = tf.train.Checkpoint(my_bart_decoder=my_bart_decoder,my_bart_encoder=my_bart_encoder,
                           summary_optimizer=summary_optimizer, reconstruction_optimizer=reconstruction_optimizer)
 
-ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=None)
 
 # if a checkpoint exists, restore the latest checkpoint.
 if ckpt_manager.latest_checkpoint:
   ckpt.restore(ckpt_manager.latest_checkpoint)
   print('Latest checkpoint restored!!')
+else :
+    print('This is New train!!(no checkpoint)')
+
+#ckpt_save_path = ckpt_manager.save()
+#print(f'Saving checkpoint for epoch at {ckpt_save_path}')
 
 EPOCHS=20
 
@@ -208,21 +235,42 @@ train_reconstruction_loss=tf.keras.metrics.Mean(name='train_reconstruction_loss'
 train_summary_accuracy = tf.keras.metrics.Mean(name='train_summary_accuracy')
 train_reconstruction_accuracy=tf.keras.metrics.Mean(name='train_reconstruction_accuracy')
 
-#print(my_bart_encoder.trainable_variables)
-#print(my_bart_decoder.trainable_variables)
-# @tf.function
+
+# 학습에 필요한 특수 토큰(summarize: 이거랑 <pad>를 앞에 붙여줘야 함)
+summarize_token=tokenizer('summarize: ')['input_ids'][:-1]
+summarize_tokens=[]
+for i in range(BATCH_SIZE):
+        summarize_tokens.append(summarize_token)
+
+summarize_tokens=tf.convert_to_tensor(summarize_tokens,dtype=tf.int64)
+#print(summarize_tokens.shape)
 
 
-def train_step(inp, summary):
+pad_token=tokenizer('<pad>')['input_ids'][:-1]
+pad_tokens=[]
+for i in range(BATCH_SIZE):
+        pad_tokens.append(pad_token)
+
+pad_tokens=tf.convert_to_tensor(pad_tokens,dtype=tf.int64)       
+#print(pad_tokens.shape)
+
+@tf.function
+def train_step(inp, summary,show):
+    decoder_input_inp=inp[:,:-1]
+    decoder_input_summary=summary[:,:-1] # huggingface 예시를 보면 이렇게 할 필요가 없는것 같아 보였지만 낚시였다.
+    # teacher는  <pad>로 시작하고 </s> 전까지 생성하도록 했다
+    # 그러면 loss를 구할 때는 <pad> 없이, </s>까지 생성해내도록 한다.
+    # 이 방식으로 하지 않으면 generate의 결과가 완전 엉뚱해진다!!!
     with tf.GradientTape(persistent=True) as tape:
-
-        output,_= my_bart_encoder({'input_ids' : inp, 'decoder_input_ids' : summary})
-        #print(output)
-        loss = summary_loss(summary, output) 
-        fake_input_predictions,_ = my_bart_decoder([output,inp],training=True)
+        #print( tf.concat([summarize_tokens,inp],axis=-1))
+        #print(summary)
+        output= my_bart_encoder({'input_ids' : tf.concat([summarize_tokens,inp],axis=-1), 'decoder_input_ids' : tf.concat([pad_tokens,decoder_input_summary],axis=-1),'training':True},training=True)
+        loss = summary_loss(summary, output)
+        fake_input_predictions = my_bart_decoder([output,tf.concat([pad_tokens,decoder_input_inp],axis=-1)],training=True)
         recon_loss = reconstruction_loss(inp,fake_input_predictions)
         total_loss=alpha*loss+(1-alpha)*recon_loss #total loss를 tape scope안에서 구해야 함.
-  
+    
+    
     summary_gradients = tape.gradient(total_loss, my_bart_encoder.trainable_variables)
     reconstruction_gradients=tape.gradient(recon_loss,my_bart_decoder.trainable_variables)
   
@@ -234,7 +282,7 @@ def train_step(inp, summary):
     train_summary_accuracy(summary_accuracy_function(summary, output))
     train_reconstruction_accuracy(reconstruction_accuracy_function(inp, fake_input_predictions))
 
-#train_step(inputs, outputs) # 예시.
+#train_step(inputs, outputs) #예시
 
 
 #for (batch, set) in enumerate(tf_train_dataset):
@@ -243,34 +291,71 @@ def train_step(inp, summary):
 #    print(train_summary_loss.result())
 #    print(train_reconstruction_loss.result())
 #    if(batch==100):
-#        break #예시.
+#        break #예시. 
 
-from tqdm import tqdm
-from tqdm import trange
 
-# for epoch in trange(EPOCHS):
-#     start = time.time()
-#     train_summary_loss.reset_states()
-#     train_summary_accuracy.reset_states()
-#     train_reconstruction_loss.reset_states()
-#     train_reconstruction_accuracy.reset_states()
-#     print("")
 
-# # # #    inp -> long sentences, tar -> summary
-#     for (batch, set) in enumerate(tqdm(tf_train_dataset)):
-#         #print("batch : "+str(batch))
-#         train_step(set[0]['input_ids'], set[0]['decoder_input_ids'])
-#         if batch % 1000 ==0 and batch!=0:
-#             print(f'\rEpoch {epoch + 1} Batch {batch} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}', end='')
+from tqdm import tqdm,trange
+import csv
+from rouge import Rouge
+rouge=Rouge()
+from nltk.translate.bleu_score import sentence_bleu
+
+NORMAL='normal_'
+CASCADE='cascade_'
+strategy=NORMAL
+
+createFolder(strategy+str(alpha))
+
+f= open(strategy+str(alpha)+'/training_results_with_scores.csv', 'w', newline='')
+wr=csv.writer(f)
+wr.writerow(['orig_article','orig_summary','gen_article','gen_summary','art_rouge','art_bleu','sum_rouge','sum_bleu'])
+f2= open(strategy+str(alpha)+'/training_loss_acc.csv', 'w', newline='')
+wr2=csv.writer(f2)
+wr2.writerow(['sum_loss','sum_acc','art_loss','art_acc'])
+#EPOCHS=0
+for epoch in trange(EPOCHS):
+    start = time.time()
+    train_summary_loss.reset_states()
+    train_summary_accuracy.reset_states()
+    train_reconstruction_loss.reset_states()
+    train_reconstruction_accuracy.reset_states()
+    print("")
+    show=False
+# # #    inp -> long sentences, tar -> summary
+    for (batch, set) in enumerate(tqdm(tf_train_dataset)):
+        #print("batch : "+str(batch))
+        if batch % 10==0:
+            show=True
+        else:
+            show=False
+        train_step(set[0]['input_ids'], set[0]['decoder_input_ids'],show)
+        if batch % 1000 ==0:
+            generate_art=my_bart_decoder([set[0]['decoder_input_ids'],[]],training=False)
+            generate_sum=my_bart_encoder({'input_ids':set[0]['input_ids']},training=False)
+            #teacher=my_bart_encoder({'input_ids': tf.concat([summarize_tokens,set[0]['input_ids']],axis=-1),'decoder_input_ids' : set[0]['decoder_input_ids']},training=True)
+            #print(logits)
+            #print("generate : " + tokenizer.batch_decode(generate)[0])
+            #print("")
+            art_rouge = rouge.get_scores([tokenizer.decode(set[0]['input_ids'][0])],[tokenizer.decode(generate_art[0])])
+            art_bleu = sentence_bleu([tokenizer.decode(set[0]['input_ids'][0])], tokenizer.decode(generate_art[0]))
+            sum_rouge = rouge.get_scores([tokenizer.decode(set[0]['decoder_input_ids'][0])],[tokenizer.decode(generate_sum[0])])
+            sum_bleu = sentence_bleu([tokenizer.decode(set[0]['decoder_input_ids'][0])],tokenizer.decode(generate_sum[0]))
+            wr.writerow([tokenizer.decode(set[0]['input_ids'][0]), tokenizer.decode(set[0]['decoder_input_ids'][0]),tokenizer.decode(generate_art[0]),tokenizer.decode(generate_sum[0]),art_rouge,art_bleu,sum_rouge,sum_bleu])
+
+
+        if batch % 100 ==0 :
+            wr2.writerow([float(train_summary_loss.result()),float(train_summary_accuracy.result()),float(train_reconstruction_loss.result()),float(train_reconstruction_accuracy.result())])
+            print(f'Epoch {epoch + 1} Batch {batch} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}')
     
-#     ckpt_save_path = ckpt_manager.save()
-#     print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
+    ckpt_save_path = ckpt_manager.save()
+    print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
 
-#     print(f'Epoch {epoch + 1} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f}')
-#     print(f'Epoch {epoch + 1} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}')
-#     print(f'Time taken for 1 epoch: {time.time() - start:.2f} secs\n')
+    print(f'Epoch {epoch + 1} Summary Loss {train_summary_loss.result():.4f} Accuracy {train_summary_accuracy.result():.4f}')
+    print(f'Epoch {epoch + 1} Reconstruct Loss {train_reconstruction_loss.result():.4f} Accuracy {train_reconstruction_accuracy.result():.4f}')
+    print(f'Time taken for 1 epoch: {time.time() - start:.2f} secs\n')
 
-def plot_Expansion(decoder_model, plot):
+def plot_Expansion(decoder_model, plot,origin_plot):
     #logits = []
     empty=[] # forward 단계에선 쓰지 않는다.
     logits=decoder_model([plot,empty],training=False)
@@ -286,7 +371,7 @@ def plot_Expansion(decoder_model, plot):
 
     return logits,plots
 
-def make_Plot(encoder_model,higher_plot):
+def make_Plot(encoder_model,higher_plot,origin_summary):
     #logits = []
     logits=encoder_model({'input_ids':higher_plot},training=False)
     #for p in higher_plot:
@@ -305,19 +390,31 @@ def make_Plot(encoder_model,higher_plot):
     
     return logits,tokenize_plots,plots
 
-import csv
-f= open('valid data result', 'w', newline='')
-wr=csv.writer(f)
-wr.writerow(['orig_article','orig_summary','gen_article','gen_summary'])
+f3= open(strategy+str(alpha)+'/valid_results_with_scores.csv', 'w', newline='')
+f4= open(strategy+str(alpha)+'/valid_scores_only.csv','w',newline='')
+wr3=csv.writer(f3)
+wr3.writerow(['orig_article','orig_summary','gen_article','gen_summary','art_rouge','art_bleu','sum_rouge','sum_bleu'])
+wr4=csv.writer(f4)
+wr4.writerow(['art_rouge','art_bleu','sum_rouge','sum_bleu']) # bleu와 rouge score만 따로 저장하는 파일.
 # #    inp -> long sentences, tar -> summary
 for (batch, set) in enumerate(tqdm(tf_validation_dataset)):
-    plot_logits,tokenize_summary,summary=make_Plot(my_bart_encoder,set[0]['input_ids'])
-    exp_logits,expansion=plot_Expansion(my_bart_decoder,tokenize_summary)
-    for i in range(BATCH_SIZE):
-        wr.writerow([set[0]['input_ids'][i],set[0]['decoder_input_ids'][i],expansion[i],summary[i]])
+    plot_logits,tokenize_summary,summary=make_Plot(my_bart_encoder,set[0]['input_ids'],set[0]['decoder_input_ids'])
+    exp_logits,expansion=plot_Expansion(my_bart_decoder,tokenize_summary,set[0]['input_ids'])
+    #print("generated summary : ")
+    #print(summary)
+    #print("generated article : ")
+    #print(expansion)
     
-    #if batch % 5 == 0:
-    #    print(f'\rBatch {batch} Summary Loss ' + str(summary_loss(set[0]['decoder_input_ids'],plot_logits)) +  " Recon Loss " + str(reconstruction_loss(set[0]['input_ids'],exp_logits)) + 'Summary Accuracy : ' + str(summary_accuracy_function(set[0]['decoder_input_ids'],plot_logits)) + 'Recons Accuracy ' + str(reconstruction_accuracy_function(set[0]['input_ids'],exp_logits)), end="") 
+    art_rouge = rouge.get_scores([tokenizer.decode(set[0]['input_ids'][0])],[expansion[0]])
+    art_bleu = sentence_bleu([tokenizer.decode(set[0]['input_ids'][0])], expansion[0])
+    sum_rouge = rouge.get_scores([tokenizer.decode(set[0]['decoder_input_ids'][0])],[summary[0]])
+    sum_bleu = sentence_bleu([tokenizer.decode(set[0]['decoder_input_ids'][0])],summary[0])
+    wr3.writerow([tokenizer.decode(set[0]['input_ids'][0]), tokenizer.decode(set[0]['decoder_input_ids'][0]),expansion[0],summary[0],art_rouge,art_bleu,sum_rouge,sum_bleu])
+    wr4.writerow([art_rouge,art_bleu,sum_rouge,sum_bleu]) # 차원이 다르므로 loss는 불가하다.
 
+        #wr4.writerow([float(summary_loss(set[0]['decoder_input_ids'],plot_logits)),float(summary_accuracy_function(set[0]['decoder_input_ids'],plot_logits)),float(reconstruction_loss(set[0]['input_ids'],exp_logits)),float(reconstruction_accuracy_function(set[0]['input_ids'],exp_logits))])
+    
+        #print(f'Batch {batch} Summary Loss ' + str(summary_loss(set[0]['decoder_input_ids'],plot_logits)) +  " Recon Loss " + str(reconstruction_loss(set[0]['input_ids'],exp_logits)) + 'Summary Accuracy : ' + str(summary_accuracy_function(set[0]['decoder_input_ids'],plot_logits)) + 'Recons Accuracy ' + str(reconstruction_accuracy_function(set[0]['input_ids'],exp_logits))) 
+    
 
 
