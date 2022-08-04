@@ -22,10 +22,10 @@ dataset = load_dataset("cnn_dailymail", '3.0.0') # cnn dailymail로 했지만 �
 from transformers import BartTokenizer,T5Tokenizer
 tokenizer = T5Tokenizer.from_pretrained("t5-small",model_max_length=1024)
 
-MAX_VOCAB = len(tokenizer.get_vocab())+1
+MAX_VOCAB = len(tokenizer.get_vocab())
 print('VOCAB_SIZE :',  MAX_VOCAB)
 BATCH_SIZE=4
-LONG_MAX=1000
+LONG_MAX=800
 SHORT_MAX=100
 
 def tokenize_function(examples):
@@ -63,9 +63,9 @@ tf_validation_dataset = small_eval_dataset.to_tf_dataset(
 
 # print(tf_train_dataset)
 
-#from transformers import TFAutoModel,BartModel,TFBartForConditionalGeneration
+from transformers import TFAutoModel,TFBartModel,TFBartForConditionalGeneration
 from transformers import TFT5ForConditionalGeneration
-bart_model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+bart_model = TFBartModel.from_pretrained("facebook/bart-base")
 inputs=tokenizer(dataset["train"][100]['article'], truncation=True,return_tensors="tf")
 outputs=tokenizer(dataset["train"][100]['highlights'], truncation=True,return_tensors="tf")
 # print(inputs)
@@ -157,22 +157,26 @@ class My_Encoder_BART(tf.keras.Model):
     def __init__(self, model,vocab_size,rate=0.1):
         super().__init__()
         self.bart_model = model
-        #self.final_layer = tf.keras.layers.Dense(vocab_size)
-        #self.dropout = tf.keras.layers.Dropout(rate)
+        self.final_layer = tf.keras.layers.Dense(vocab_size)
+        self.dropout = tf.keras.layers.Dropout(rate)
 
-    def call(self, inputs, training):
+    def call(self, inputs, teacher=False):
     # Keras models prefer if you pass all your inputs in the first argument
         #bart_output=self.bart_model(inputs).last_hidden_state
-        if training is True:
+        if teacher is True:
             #print(inputs)
-            bart_output=self.bart_model(inputs).logits # 왜인지 모르겠지만 얘는 되는데 decoder는 같은 코드가 실행이 안됨
+            bart_output=self.bart_model({'input_ids':inputs['input_ids'],'decoder_input_ids':inputs['decoder_input_ids']}).last_hidden_state # 왜인지 모르겠지만 얘는 되는데 decoder는 같은 코드가 실행이 안됨
             #print("call shape " + str(bart_output.shape))
         else:
-            bart_output=self.bart_model.generate(inputs['input_ids'])
-        #dropout=self.dropout(bart_output)
-        #final_output = self.final_layer(dropout)  # (batch_size, tar_seq_len, target_vocab_size)
-        return bart_output
-        #return final_output
+            #bart_output=self.bart_model.generate(inputs['input_ids'])
+            bart_output=self.bart_model({'input_ids':inputs['input_ids']}).last_hidden_state
+
+        dropout=self.dropout(bart_output)
+        
+        final_output = self.final_layer(dropout)  # (batch_size, tar_seq_len, target_vocab_size)
+        
+        #return bart_output
+        return final_output
 
 
 mirrored_strategy = tf.distribute.MirroredStrategy()
@@ -184,7 +188,6 @@ print(gpus[1].name)
 my_bart_encoder = My_Encoder_BART(
     model=bart_model,
     vocab_size=MAX_VOCAB,
-    #tokenizers.pt.get_vocab_size().numpy(),
     rate=0.1)
 
 BART_BASE_DIM=768
@@ -192,7 +195,7 @@ BART_LARGE_DIM=1024
 T5_SMALL_DIM=512
 #with tf.device(gpus[1].name):
 my_bart_decoder = My_Decoder_BART(
-    model=bart_model,
+    model=decoder_bart_model,
     vocab_size=MAX_VOCAB,
     dim=T5_SMALL_DIM,
     #tokenizers.pt.get_vocab_size().numpy(),
@@ -255,31 +258,42 @@ pad_tokens=tf.convert_to_tensor(pad_tokens,dtype=tf.int64)
 #print(pad_tokens.shape)
 
 @tf.function
-def train_step(inp, summary,show):
+def train_step(inp, summary,alpha,teacher):
     decoder_input_inp=inp[:,:-1]
     decoder_input_summary=summary[:,:-1] # huggingface 예시를 보면 이렇게 할 필요가 없는것 같아 보였지만 낚시였다.
     # teacher는  <pad>로 시작하고 </s> 전까지 생성하도록 했다
     # 그러면 loss를 구할 때는 <pad> 없이, </s>까지 생성해내도록 한다.
     # 이 방식으로 하지 않으면 generate의 결과가 완전 엉뚱해진다!!!
+    TEACHER=teacher
+    
     with tf.GradientTape(persistent=True) as tape:
         #print( tf.concat([summarize_tokens,inp],axis=-1))
         #print(summary)
-        output= my_bart_encoder({'input_ids' : tf.concat([summarize_tokens,inp],axis=-1), 'decoder_input_ids' : tf.concat([pad_tokens,decoder_input_summary],axis=-1),'training':True},training=True)
-        loss = summary_loss(summary, output)
+        output= my_bart_encoder({'input_ids' : tf.concat([summarize_tokens,inp],axis=-1), 'decoder_input_ids' : tf.concat([pad_tokens,decoder_input_summary],axis=-1),'training':True},teacher=TEACHER)
+        #output=my_bart_encoder({'input_ids' : tf.concat([summarize_tokens,inp],axis=-1),'training':True},teacher=False)
+        if TEACHER :
+            loss = summary_loss(summary, output)
         fake_input_predictions = my_bart_decoder([output,tf.concat([pad_tokens,decoder_input_inp],axis=-1)],training=True)
         recon_loss = reconstruction_loss(inp,fake_input_predictions)
-        total_loss=alpha*loss+(1-alpha)*recon_loss #total loss를 tape scope안에서 구해야 함.
-    
+        
+        if TEACHER :
+            total_loss=alpha*loss+(1-alpha)*recon_loss #total loss를 tape scope안에서 구해야 함.
+        else :
+            total_loss=recon_loss
     
     summary_gradients = tape.gradient(total_loss, my_bart_encoder.trainable_variables)
     reconstruction_gradients=tape.gradient(recon_loss,my_bart_decoder.trainable_variables)
   
     summary_optimizer.apply_gradients(zip(summary_gradients, my_bart_encoder.trainable_variables))
     reconstruction_optimizer.apply_gradients(zip(reconstruction_gradients,my_bart_decoder.trainable_variables))
-  
-    train_summary_loss(loss)
+    
+    if TEACHER:
+        train_summary_loss(loss)
+        train_summary_accuracy(summary_accuracy_function(summary, output))
+    else:
+        train_summary_loss(0)
+        train_summary_accuracy(0)
     train_reconstruction_loss(recon_loss)
-    train_summary_accuracy(summary_accuracy_function(summary, output))
     train_reconstruction_accuracy(reconstruction_accuracy_function(inp, fake_input_predictions))
 
 #train_step(inputs, outputs) #예시
@@ -303,7 +317,7 @@ from nltk.translate.bleu_score import sentence_bleu
 
 NORMAL='normal_'
 CASCADE='cascade_'
-strategy=NORMAL
+strategy=CASCADE
 
 createFolder(strategy+str(alpha))
 
@@ -321,27 +335,26 @@ for epoch in trange(EPOCHS):
     train_reconstruction_loss.reset_states()
     train_reconstruction_accuracy.reset_states()
     print("")
-    show=False
+    teacher=True
+    if epoch>=2:
+        teacher=False
 # # #    inp -> long sentences, tar -> summary
     for (batch, set) in enumerate(tqdm(tf_train_dataset)):
         #print("batch : "+str(batch))
-        if batch % 10==0:
-            show=True
-        else:
-            show=False
-        train_step(set[0]['input_ids'], set[0]['decoder_input_ids'],show)
+
+        train_step(set[0]['input_ids'], set[0]['decoder_input_ids'],alpha=alpha,teacher=teacher)
         if batch % 1000 ==0:
             generate_art=my_bart_decoder([set[0]['decoder_input_ids'],[]],training=False)
-            generate_sum=my_bart_encoder({'input_ids':set[0]['input_ids']},training=False)
+            generate_sum=my_bart_encoder({'input_ids':set[0]['input_ids']},teacher=False)
             #teacher=my_bart_encoder({'input_ids': tf.concat([summarize_tokens,set[0]['input_ids']],axis=-1),'decoder_input_ids' : set[0]['decoder_input_ids']},training=True)
             #print(logits)
             #print("generate : " + tokenizer.batch_decode(generate)[0])
             #print("")
             art_rouge = rouge.get_scores([tokenizer.decode(set[0]['input_ids'][0])],[tokenizer.decode(generate_art[0])])
             art_bleu = sentence_bleu([tokenizer.decode(set[0]['input_ids'][0])], tokenizer.decode(generate_art[0]))
-            sum_rouge = rouge.get_scores([tokenizer.decode(set[0]['decoder_input_ids'][0])],[tokenizer.decode(generate_sum[0])])
-            sum_bleu = sentence_bleu([tokenizer.decode(set[0]['decoder_input_ids'][0])],tokenizer.decode(generate_sum[0]))
-            wr.writerow([tokenizer.decode(set[0]['input_ids'][0]), tokenizer.decode(set[0]['decoder_input_ids'][0]),tokenizer.decode(generate_art[0]),tokenizer.decode(generate_sum[0]),art_rouge,art_bleu,sum_rouge,sum_bleu])
+            sum_rouge = rouge.get_scores([tokenizer.decode(set[0]['decoder_input_ids'][0])],[tokenizer.decode(tf.argmax(generate_sum[0],axis=-1))])
+            sum_bleu = sentence_bleu([tokenizer.decode(set[0]['decoder_input_ids'][0])],tokenizer.decode(tf.argmax(generate_sum[0],axis=-1)))
+            wr.writerow([tokenizer.decode(set[0]['input_ids'][0]), tokenizer.decode(set[0]['decoder_input_ids'][0]),tokenizer.decode(generate_art[0]),tokenizer.decode(tf.argmax(generate_sum[0],axis=-1)),art_rouge,art_bleu,sum_rouge,sum_bleu])
 
 
         if batch % 100 ==0 :
