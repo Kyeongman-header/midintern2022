@@ -47,6 +47,7 @@ tf_train_dataset = small_train_dataset.to_tf_dataset(
     label_cols=['decoder_input_ids'],
     shuffle=True,
     collate_fn=data_collator,
+    drop_remainder=True, # 무조건 batch size로 고정(마지막에 남는 애들은 버림)
     batch_size=BATCH_SIZE,
 ) # train dataset을 batch 사이즈별로 제공해줌.
 
@@ -57,6 +58,7 @@ tf_validation_dataset = small_eval_dataset.to_tf_dataset(
     label_cols=['decoder_input_ids'],
     shuffle=False,
     collate_fn=data_collator,
+    drop_remainder=True,
     batch_size=BATCH_SIZE,
 )
 
@@ -154,11 +156,16 @@ class My_Decoder_BART(tf.keras.Model):
         #return final_output
 
 class My_Encoder_BART(tf.keras.Model):
-    def __init__(self, model,vocab_size,rate=0.1):
+    def __init__(self, model,vocab_size,art_length,sum_length,rate=0.1):
         super().__init__()
+        self.vocab_size=vocab_size
+        self.art_length=art_length
+        self.sum_length=sum_length
         self.bart_model = model
-        self.final_layer = tf.keras.layers.Dense(vocab_size)
+        self.art_layer = tf.keras.layers.Dense(vocab_size)
+        self.sum_layer = tf.keras.layers.Dense(self.sum_length*vocab_size)
         self.dropout = tf.keras.layers.Dropout(rate)
+        
 
     def call(self, inputs, teacher=False):
     # Keras models prefer if you pass all your inputs in the first argument
@@ -173,8 +180,13 @@ class My_Encoder_BART(tf.keras.Model):
 
         dropout=self.dropout(bart_output)
         
-        final_output = self.final_layer(dropout)  # (batch_size, tar_seq_len, target_vocab_size)
-        
+        final_output = self.art_layer(dropout)  # (batch_size, art_seq_len, dim)
+        final_output = tf.reshape(final_output,[-1,self.art_length*self.vocab_size]) #(batch_size,art_len*vocab_size)
+        final_output = self.sum_layer(final_output) #(batch_size,sum_len*vocab_size)
+        final_output = tf.reshape(final_output,[-1,self.sum_length,self.vocab_size]) #(batch_size,sum_len,vocab_size)
+        # 어차피 summary length와 article length는 각각 고정되어 있다(물론 패딩되어 있다.) 따라서 이렇게 하면 강제로 차원을 맞춰
+        # teacher forcing이든 아니든 summary error를 구할 수 있게 된다.
+        # 또한 차원 축소로서의 역할을 제대로 할 수 있게 된다.
         #return bart_output
         return final_output
 
@@ -212,9 +224,12 @@ summary_optimizer = tf.keras.optimizers.Adam(LEARNING_RATE, beta_1=0.9, beta_2=0
 reconstruction_optimizer = tf.keras.optimizers.Adam(LEARNING_RATE, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
 
-alpha=0.85
+START_ALPHA=0.85
+NORMAL='_normal_'
+CASCADE='_0.3cascade_noTeacherAfter2Epoch'
+strategy=CASCADE
 
-checkpoint_path = "./MY_checkpoints/train_"+str(alpha)
+checkpoint_path = "./MY_checkpoints/train_"+str(START_ALPHA)+str(strategy)
 
 ckpt = tf.train.Checkpoint(my_bart_decoder=my_bart_decoder,my_bart_encoder=my_bart_encoder,
                           summary_optimizer=summary_optimizer, reconstruction_optimizer=reconstruction_optimizer)
@@ -265,14 +280,15 @@ def train_step(inp, summary,alpha,teacher):
     # 그러면 loss를 구할 때는 <pad> 없이, </s>까지 생성해내도록 한다.
     # 이 방식으로 하지 않으면 generate의 결과가 완전 엉뚱해진다!!!
     TEACHER=teacher
+    alpha=alpha
     
     with tf.GradientTape(persistent=True) as tape:
         #print( tf.concat([summarize_tokens,inp],axis=-1))
         #print(summary)
         output= my_bart_encoder({'input_ids' : tf.concat([summarize_tokens,inp],axis=-1), 'decoder_input_ids' : tf.concat([pad_tokens,decoder_input_summary],axis=-1),'training':True},teacher=TEACHER)
-        #output=my_bart_encoder({'input_ids' : tf.concat([summarize_tokens,inp],axis=-1),'training':True},teacher=False)
-        if TEACHER :
+        if TEACHER:
             loss = summary_loss(summary, output)
+        
         fake_input_predictions = my_bart_decoder([output,tf.concat([pad_tokens,decoder_input_inp],axis=-1)],training=True)
         recon_loss = reconstruction_loss(inp,fake_input_predictions)
         
@@ -290,9 +306,10 @@ def train_step(inp, summary,alpha,teacher):
     if TEACHER:
         train_summary_loss(loss)
         train_summary_accuracy(summary_accuracy_function(summary, output))
-    else:
+    else :
         train_summary_loss(0)
         train_summary_accuracy(0)
+    
     train_reconstruction_loss(recon_loss)
     train_reconstruction_accuracy(reconstruction_accuracy_function(inp, fake_input_predictions))
 
@@ -315,9 +332,7 @@ from rouge import Rouge
 rouge=Rouge()
 from nltk.translate.bleu_score import sentence_bleu
 
-NORMAL='normal_'
-CASCADE='cascade_'
-strategy=CASCADE
+
 
 createFolder(strategy+str(alpha))
 
@@ -335,13 +350,30 @@ for epoch in trange(EPOCHS):
     train_reconstruction_loss.reset_states()
     train_reconstruction_accuracy.reset_states()
     print("")
+    alpha=START_ALPHA
+
     teacher=True
-    if epoch>=2:
+    
+    whole_length=tf_train_dataset.__len__
+    cascade=whole_length/3
+    cascade_count=1
+    
+    print("whole batch length : "+str(whole_length))
+    print("cascade :" + str(cascade))
+
+    if epoch>=2: # 0,1 두 epoch만 teacher forcing으로 summary의 형태를 잡아준다.(이때도 recon loss의 비율이 점점 커진다.)
+        # 그 이후로는 recon loss만을 사용한다.
         teacher=False
+        print("this epoch teacher forcing is not used")
+
 # # #    inp -> long sentences, tar -> summary
     for (batch, set) in enumerate(tqdm(tf_train_dataset)):
         #print("batch : "+str(batch))
-
+        if batch > cascade * cascade_count:
+            alpha=alpha-0.2
+            cascade_count=cascade_count+1
+            print("now on, alpha is "+str(alpha))
+        
         train_step(set[0]['input_ids'], set[0]['decoder_input_ids'],alpha=alpha,teacher=teacher)
         if batch % 1000 ==0:
             generate_art=my_bart_decoder([set[0]['decoder_input_ids'],[]],training=False)
