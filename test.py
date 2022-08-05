@@ -24,8 +24,8 @@ tokenizer = T5Tokenizer.from_pretrained("t5-small",model_max_length=1024)
 
 MAX_VOCAB = len(tokenizer.get_vocab())
 print('VOCAB_SIZE :',  MAX_VOCAB)
-BATCH_SIZE=4
-LONG_MAX=800
+BATCH_SIZE=3
+LONG_MAX=850
 SHORT_MAX=100
 
 def tokenize_function(examples):
@@ -162,8 +162,9 @@ class My_Encoder_BART(tf.keras.Model):
         self.art_length=art_length
         self.sum_length=sum_length
         self.bart_model = model
-        self.art_layer = tf.keras.layers.Dense(vocab_size)
-        self.sum_layer = tf.keras.layers.Dense(self.sum_length*vocab_size)
+        #self.art_layer = tf.keras.layers.Dense(vocab_size)
+        self.down_layer=tf.keras.layers.Dense(self.sum_length)
+        self.sum_layer = tf.keras.layers.Dense(self.vocab_size)
         self.dropout = tf.keras.layers.Dropout(rate)
         
 
@@ -178,12 +179,17 @@ class My_Encoder_BART(tf.keras.Model):
             #bart_output=self.bart_model.generate(inputs['input_ids'])
             bart_output=self.bart_model({'input_ids':inputs['input_ids']}).last_hidden_state
 
-        dropout=self.dropout(bart_output)
         
-        final_output = self.art_layer(dropout)  # (batch_size, art_seq_len, dim)
-        final_output = tf.reshape(final_output,[-1,self.art_length*self.vocab_size]) #(batch_size,art_len*vocab_size)
-        final_output = self.sum_layer(final_output) #(batch_size,sum_len*vocab_size)
-        final_output = tf.reshape(final_output,[-1,self.sum_length,self.vocab_size]) #(batch_size,sum_len,vocab_size)
+        dropout=self.dropout(bart_output)
+        #print(dropout.shape)
+        
+        #final_output = self.art_layer(dropout)  # (batch_size, art_seq_len, dim)
+        final_output = tf.reshape(dropout,[-1,dropout.shape[2],dropout.shape[1]]) #(batch_size,dim,art_len)
+        final_output = self.down_layer(final_output) #(batch_size,dim,sum_len) # 이 down layer 과정을 거치지 않고 한번에 만드려고 하면
+        # 너무 커다란 weight이 필요하다.(800*764 by 100*32100)
+        # 이렇게 두번에 걸치면 (800 by 100), (764 by 32100) (후자는 예전에도 원래 하던 거임) 으로 바뀐다.
+        final_output = tf.reshape(final_output,[-1,final_output.shape[2],final_output.shape[1]]) #(bach_size, sum_len, dim)
+        final_output = self.sum_layer(final_output) #(batch_size,sum_len,vocab_size)
         # 어차피 summary length와 article length는 각각 고정되어 있다(물론 패딩되어 있다.) 따라서 이렇게 하면 강제로 차원을 맞춰
         # teacher forcing이든 아니든 summary error를 구할 수 있게 된다.
         # 또한 차원 축소로서의 역할을 제대로 할 수 있게 된다.
@@ -200,6 +206,8 @@ print(gpus[1].name)
 my_bart_encoder = My_Encoder_BART(
     model=bart_model,
     vocab_size=MAX_VOCAB,
+    art_length=LONG_MAX,
+    sum_length=SHORT_MAX,
     rate=0.1)
 
 BART_BASE_DIM=768
@@ -285,7 +293,11 @@ def train_step(inp, summary,alpha,teacher):
     with tf.GradientTape(persistent=True) as tape:
         #print( tf.concat([summarize_tokens,inp],axis=-1))
         #print(summary)
-        output= my_bart_encoder({'input_ids' : tf.concat([summarize_tokens,inp],axis=-1), 'decoder_input_ids' : tf.concat([pad_tokens,decoder_input_summary],axis=-1),'training':True},teacher=TEACHER)
+        #output= my_bart_encoder({'input_ids' : tf.concat([summarize_tokens,inp],axis=-1), 'decoder_input_ids' : tf.concat([pad_tokens,decoder_input_summary],axis=-1),'training':True},teacher=False) # 아무리 생각해도 얘는 무조건 false인 상태로 학습을 시켜야 한다!! 즉 teacher forcing은 없고
+
+        # 대신 summary 데이터가 존재해서 그 loss가 사용되냐 안되냐의 차이인 것일 뿐이다.
+        output=my_bart_encoder({'input_ids' : inp, 'training':True}, teacher=False)
+
         if TEACHER:
             loss = summary_loss(summary, output)
         
@@ -334,12 +346,12 @@ from nltk.translate.bleu_score import sentence_bleu
 
 
 
-createFolder(strategy+str(alpha))
+createFolder(strategy+str(START_ALPHA))
 
-f= open(strategy+str(alpha)+'/training_results_with_scores.csv', 'w', newline='')
+f= open(strategy+str(START_ALPHA)+'/training_results_with_scores.csv', 'w', newline='')
 wr=csv.writer(f)
 wr.writerow(['orig_article','orig_summary','gen_article','gen_summary','art_rouge','art_bleu','sum_rouge','sum_bleu'])
-f2= open(strategy+str(alpha)+'/training_loss_acc.csv', 'w', newline='')
+f2= open(strategy+str(START_ALPHA)+'/training_loss_acc.csv', 'w', newline='')
 wr2=csv.writer(f2)
 wr2.writerow(['sum_loss','sum_acc','art_loss','art_acc'])
 #EPOCHS=0
@@ -354,8 +366,8 @@ for epoch in trange(EPOCHS):
 
     teacher=True
     
-    whole_length=tf_train_dataset.__len__
-    cascade=whole_length/3
+    whole_length=tf_train_dataset.__len__()
+    cascade=int(float(whole_length)/3)
     cascade_count=1
     
     print("whole batch length : "+str(whole_length))
@@ -435,8 +447,8 @@ def make_Plot(encoder_model,higher_plot,origin_summary):
     
     return logits,tokenize_plots,plots
 
-f3= open(strategy+str(alpha)+'/valid_results_with_scores.csv', 'w', newline='')
-f4= open(strategy+str(alpha)+'/valid_scores_only.csv','w',newline='')
+f3= open(strategy+str(START_ALPHA)+'/valid_results_with_scores.csv', 'w', newline='')
+f4= open(strategy+str(START_ALPHA)+'/valid_scores_only.csv','w',newline='')
 wr3=csv.writer(f3)
 wr3.writerow(['orig_article','orig_summary','gen_article','gen_summary','art_rouge','art_bleu','sum_rouge','sum_bleu'])
 wr4=csv.writer(f4)
