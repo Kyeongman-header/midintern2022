@@ -122,6 +122,7 @@ class My_Disc(tf.keras.Model):
         self.Dense=tf.keras.layers.Dense(1)
         self.Dropout=tf.keras.layers.Dropout(rate)
         self.Embedding=tf.keras.layers.CategoryEncoding(num_tokens=vocab_size, output_mode="one_hot")
+        self.LSTM=tf.keras.layers.LSTM(dim)
         self.Emb_Dense=tf.keras.layers.Dense(dim)
 
     def call(self,input,is_first=False):
@@ -129,8 +130,9 @@ class My_Disc(tf.keras.Model):
         emb=self.embedding(input,self.vocab_size,self.dim,self.length,is_first)
         
         # emb=self.bert_model({'inputs_embeds' : emb, 'training':True}).last_hidden_state # (b,len,dim)
-        emb=tf.reshape(emb,[-1,emb.shape[1]*emb.shape[2]]) # (b,len*dim)
+        emb=self.LSTM(emb) #(b,dim)
         dropout=self.Dropout(emb)
+        
         final_output=self.Dense(dropout)
         return final_output #(b,1)
     

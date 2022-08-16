@@ -59,8 +59,8 @@ my_decoder=My_Decoder_tiny_T5(model=t5_1,dim=consts.DIM,vocab_size=MAX_VOCAB,len
 my_encoder=My_Encoder_tiny_T5(model=t5_2,dim=consts.DIM,vocab_size=MAX_VOCAB,length=consts.SHORT_MAX,inp_length=consts.LONG_MAX)
 my_enc_disc=My_Disc(model=bert_1,vocab_size=MAX_VOCAB,length=consts.SHORT_MAX,dim=consts.DIS_DIM)
 my_dec_disc=My_Disc(model=bert_2,vocab_size=MAX_VOCAB,length=consts.LONG_MAX,dim=consts.DIS_DIM)
-ae_loss=SparseCategorical_Loss(LAMBDA=1)
-gan_loss=DiscriminatorAndGenerator_Loss(ALPHA=0.1)
+ae_loss=SparseCategorical_Loss(LAMBDA=consts.LAMBDA)
+gan_loss=DiscriminatorAndGenerator_Loss(ALPHA=consts.ALPHA)
 enc_optimizer = tf.keras.optimizers.Adam(consts.LEARNING_RATE, beta_1=0.9, beta_2=0.98,epsilon=1e-9) # summary의 teacher forcing을 위한 optimizer
 dec_optimizer = tf.keras.optimizers.Adam(consts.LEARNING_RATE, beta_1=0.9,beta_2=0.98,epsilon=1e-9) # AE 구조의 recon loss를 위한 optimize
 enc_disc_optimizer=tf.keras.optimizers.Adam(consts.LEARNING_RATE, beta_1=0.9, beta_2=0.98,epsilon=1e-9)
@@ -109,27 +109,39 @@ def train_step(inp, sum,teacher): # 기본적으로, summary pair가 존재하�
         t5=my_dec_disc(dec_output,is_first=False) #fake output
         t6=my_dec_disc(loss_inp,is_first=True) # real output
 
-        ae_dec_loss=ae_loss.reconstruction_loss(loss_inp,dec_output)
-        gan_dec_gen_loss=gan_loss.gen_loss(t5)
-        gan_dec_cri_loss=gan_loss.critic_loss(t6,t5)
+        cycled_ae_dec_loss=ae_loss.reconstruction_loss(loss_inp,dec_output)
+        # cycled_gan_dec_gen_loss=gan_loss.gen_loss(t5)
+        # cycled_gan_dec_cri_loss=gan_loss.critic_loss(t6,t5)
         
         if teacher is True: # teacher가 true라면, decoder도 summary pair를 이용해 cycle 학습을 해준다.
             dec_output=my_decoder([pad_sum,pad_inp],starts=start_tokens,end=end_token,teacher=True,is_first=True) #기본적으로 teacher forcing.
+            t7=my_dec_disc(dec_output,is_first=False)
+            t8=my_dec_disc(loss_inp,is_first=True)
+            ae_dec_loss=ae_loss.reconstruction_loss(loss_inp,dec_output)
+            gan_dec_gen_loss=gan_loss.gen_loss(t7)
+            gan_dec_cri_loss=gan_loss.critic_loss(t8,t7)
             cycle_enc_output=my_encoder([dec_output,pad_sum],starts=start_tokens,end=end_token,teacher=teacher,is_first=False)
-            cycled_loss=ae_loss.summary_loss(loss_sum,cycle_enc_output)
+            # t9=my_enc_disc(cycle_enc_output,is_first=False) # fake output
+            # t10=my_enc_disc(loss_sum,is_first=True) # real output
+            cycled_ae_enc_loss=ae_loss.summary_loss(loss_sum,cycle_enc_output)
+            # cycled_gan_enc_gen_loss=gan_loss.gen_loss(t9)
+            # cycled_gan_enc_cri_loss=gan_loss.critic_loss(t10,t9)
         else :
-            cycled_loss=0
+            ae_dec_loss=0
+            gan_dec_gen_loss=0
+            gan_dec_cri_loss=0
+            cycled_ae_enc_loss=0
 
-        total_enc_gen_loss=ae_enc_loss+gan_enc_gen_loss+ae_dec_loss
+        total_enc_gen_loss=ae_enc_loss+gan_enc_gen_loss+consts.GAMMA*(cycled_ae_dec_loss+cycled_ae_enc_loss)
         total_enc_disc_loss=gan_enc_cri_loss
-        total_dec_gen_loss=ae_dec_loss+gan_dec_gen_loss+cycled_loss
+        total_dec_gen_loss=ae_dec_loss+gan_dec_gen_loss+consts.GAMMA*(cycled_ae_enc_loss+cycled_ae_dec_loss) # 현재 구조는 no teacher 일때 decoder는 cycled dec loss만을 이용할 수 있다(사실 원래 그랬긴 하지)
         total_dec_disc_loss=gan_dec_cri_loss
-
         
     ae_enc_acc=ae_loss.summary_accuracy_function(loss_sum,enc_output)
     ae_dec_acc=ae_loss.reconstruction_accuracy_function(loss_inp,dec_output)
+
     if teacher is True:
-        ae_cycled_acc=ae_loss.summary_accuracy_function(loss_sum,cycle_enc_output)
+        enc_cycled_acc=ae_loss.summary_accuracy_function(loss_sum,cycle_enc_output)
 
     enc_gradients = tape.gradient(total_enc_gen_loss, my_encoder.trainable_variables)
     enc_disc_gradients=tape.gradient(total_enc_disc_loss,my_enc_disc.trainable_variables)
@@ -149,8 +161,8 @@ def train_step(inp, sum,teacher): # 기본적으로, summary pair가 존재하�
     train_dec_disc_loss(total_dec_disc_loss)
 
     if teacher is True:
-        train_enc_cycled_loss(cycled_loss)
-        train_enc_cycled_accuracy(ae_cycled_acc)
+        train_enc_cycled_loss(cycled_ae_enc_loss)
+        train_enc_cycled_accuracy(enc_cycled_acc)
     else:
         train_enc_cycled_loss(0)
         train_enc_cycled_accuracy(0)
