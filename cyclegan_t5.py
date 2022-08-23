@@ -66,9 +66,12 @@ dec_optimizer = tf.keras.optimizers.Adam(consts.LEARNING_RATE, beta_1=0.9,beta_2
 enc_disc_optimizer=tf.keras.optimizers.Adam(consts.LEARNING_RATE, beta_1=0.9, beta_2=0.98,epsilon=1e-9)
 dec_disc_optimizer=tf.keras.optimizers.Adam(consts.LEARNING_RATE, beta_1=0.9, beta_2=0.98,epsilon=1e-9)
 
-train_summary_loss = tf.keras.metrics.Mean(name='train_summary_loss')
-
-
+import datetime
+current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+train_log_dir = 'logs/gradient_tape/' + current_time + '/train'
+# test_log_dir = 'logs/gradient_tape/' + current_time + '/test'
+train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+# test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
 train_enc_gen_loss=tf.keras.metrics.Mean(name='train_enc_gen_loss')
 train_enc_gen_accuracy = tf.keras.metrics.Mean(name='train_enc_gen_accuracy')
@@ -229,11 +232,19 @@ for epoch in trange(consts.EPOCHS):
         
         train_step(set[0]['input_ids'], set[0]['decoder_input_ids'],teacher=teacher)
         # if batch % 1000 ==0:
-            
+        with train_summary_writer.as_default():
+            tf.summary.scalar('enc_gen_loss', train_enc_gen_loss.result(), step=epoch)
+            tf.summary.scalar('enc_gen_accuracy', train_enc_gen_accuracy.result(), step=epoch)
+            tf.summary.scalar('enc_disc_loss', train_enc_disc_loss.result(), step=epoch)
+            tf.summary.scalar('dec_gen_loss', train_dec_gen_loss.result(), step=epoch)
+            tf.summary.scalar('dec_gen_accuracy', train_dec_gen_accuracy.result(), step=epoch)
+            tf.summary.scalar('dec_disc_loss', train_dec_disc_loss.result(), step=epoch)
+            tf.summary.scalar('dec_enc_cycled_loss', train_enc_cycled_loss.result(), step=epoch)
+            tf.summary.scalar('dec_enc_cycled_accuracy', train_enc_cycled_accuracy.result(), step=epoch)
         if batch % 100 ==0 :
-            wr2.writerow([float(train_enc_gen_loss.result()),float(train_enc_gen_accuracy.result()),float(train_enc_disc_loss.result()),
-            float(train_dec_gen_loss.result()),float(train_dec_gen_accuracy.result()),float(train_dec_disc_loss.result()),float(train_enc_cycled_loss.result()),
-            float(train_enc_cycled_accuracy.result())])
+            # wr2.writerow([float(train_enc_gen_loss.result()),float(train_enc_gen_accuracy.result()),float(train_enc_disc_loss.result()),
+            # float(train_dec_gen_loss.result()),float(train_dec_gen_accuracy.result()),float(train_dec_disc_loss.result()),float(train_enc_cycled_loss.result()),
+            # float(train_enc_cycled_accuracy.result())])
             print(f'Epoch {epoch + 1} Batch {batch} Encoder_Gen_Loss: {train_enc_gen_loss.result():.4f} | Accuracy: {train_enc_gen_accuracy.result():.4f}| Encoder_Disc_Loss: {train_enc_disc_loss.result():.4f} | Decoder_Gen_Loss: {train_dec_gen_loss.result():.4f} | Accuracy: {train_dec_gen_accuracy.result():.4f} | Decoder_Disc_Loss: {train_dec_disc_loss.result():.4f}')
             print(f'| Encoder_Cycle_Loss: {train_enc_cycled_loss.result():.4f} | Accuracy: {train_enc_cycled_accuracy.result():.4f}')
     
