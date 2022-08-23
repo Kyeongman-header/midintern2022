@@ -34,7 +34,7 @@ def tokenize_function(examples):
     return {'input_ids' : t5_tokenizer(examples["article"],max_length=consts.LONG_MAX, padding='max_length', truncation=True)['input_ids'],'decoder_input_ids' : t5_tokenizer(examples["highlights"], max_length=consts.SHORT_MAX, padding='max_length', truncation=True)['input_ids']}
 
 tokenized_datasets = dataset.map(tokenize_function, batched=True)
-small_train_dataset = tokenized_datasets["train"].shuffle(seed=42)
+small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(50000))
 small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000))
 from transformers import DefaultDataCollator
 data_collator = DefaultDataCollator(return_tensors="tf")
