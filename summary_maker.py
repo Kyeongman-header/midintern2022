@@ -52,7 +52,11 @@ def summary_maker(RANGE=10, length=800,file="train",is_model_or_given_dataset=Tr
     summary=[]
 
     truncated_target=[]
-    for t in total_target[0][:RANGE]:
+    if RANGE is not 0:
+        whole_data=total_target[0][:RANGE]
+    else:
+        whole_data=total_target[0]
+    for t in whole_data:
         tt=(' ').join(t.split()[:length])
         print(len(tt))
         truncated_target.append(tt)
@@ -61,7 +65,10 @@ def summary_maker(RANGE=10, length=800,file="train",is_model_or_given_dataset=Tr
             summary.append(s[0]["summary_text"])
         
     if is_model_or_given_dataset is False:
-        summary=total_source[0][:RANGE]
+        if RANGE is not 0:
+            summary=total_source[0][:RANGE]
+        else:
+            summary=total_source[0]
     
     token_summary=tokenizer(summary,return_tensors="tf",padding='longest', truncation=True).input_ids
     token_target=tokenizer(truncated_target,return_tensors="tf",padding='longest', truncation=True).input_ids

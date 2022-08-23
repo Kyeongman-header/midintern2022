@@ -15,8 +15,8 @@ from summary_maker import *
 
 TRAIN_FILE="train"
 VALID_FILE="valid"
-summary_maker(RANGE=2,length=800,file=TRAIN_FILE,is_model_or_given_dataset=False)
-summary_maker(RANGE=2,length=800,file=VALID_FILE,is_model_or_given_dataset=False)
+summary_maker(RANGE=0,length=800,file=TRAIN_FILE,is_model_or_given_dataset=False)
+summary_maker(RANGE=0,length=800,file=VALID_FILE,is_model_or_given_dataset=False)
 
 token_summary=np.load("./bart/"+TRAIN_FILE +"/token_summary.npy")
 token_target=np.load("./bart/"+TRAIN_FILE +"/token_target.npy")
