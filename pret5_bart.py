@@ -4,64 +4,42 @@ import time
 import tensorflow as tf
 import os
 import numpy as np
+import torch
+tf.config.set_visible_devices([], 'GPU') # CPU로 학습하기.
+from summary_maker import *
 
 # mirrored_strategy = tf.distribute.MirroredStrategy()
 # gpus = tf.config.experimental.list_logical_devices('GPU') # 멀티 gpu 세팅.
-total_source=[]
+# tf.debugging.set_log_device_placement(True)
 
-with open("writingPrompts/"+ "test.wp_source", encoding='UTF8') as f:
-    stories = f.readlines()
-    stories = [" ".join(i.split()[0:1000]) for i in stories]
-    temp_stories=[]
-    for story in stories:
-        temp_stories.append(story.replace("<newline>",""))
-    total_source.append(temp_stories)
 
-total_target=[]
+TRAIN_FILE="train"
+VALID_FILE="valid"
+summary_maker(RANGE=2,length=800,file=TRAIN_FILE,is_model_or_given_dataset=False)
+summary_maker(RANGE=2,length=800,file=VALID_FILE,is_model_or_given_dataset=False)
 
-with open("writingPrompts/"+ "test.wp_target", encoding='UTF8') as f:
-    stories = f.readlines()
-    stories = [" ".join(i.split()[0:1000]) for i in stories]
-    temp_stories=[]
-    for story in stories:
-        temp_stories.append(story.replace("<newline>",""))
-    total_target.append(temp_stories)
-
-# print(len(total_source[0]))
-# print(len(total_target[0]))
+token_summary=np.load("./bart/"+TRAIN_FILE +"/token_summary.npy")
+token_target=np.load("./bart/"+TRAIN_FILE +"/token_target.npy")
+valid_token_summary=np.load("./bart/"+VALID_FILE +"/token_summary.npy")
+valid_token_target=np.load("./bart/"+VALID_FILE +"/token_target.npy")
 
 from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
-
-tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
-
 bart = TFAutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn")
-
-from transformers import pipeline
-
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-summary=[]
-
-truncated_target=[]
-for t in total_target[0][:10]:
-    tt=(' ').join(t.split()[:800])
-    print(len(tt))
-    truncated_target.append(tt)
-    
-    s=summarizer(tt,max_length=130, min_length=30, do_sample=False)
-    summary.append(s[0]["summary_text"])
-
-token_summary=tokenizer(summary,return_tensors="tf",padding='longest', truncation=True).input_ids
-token_target=tokenizer(truncated_target,return_tensors="tf",padding='longest', truncation=True).input_ids
-print(token_summary.shape)
-print(token_target.shape)
-
-
+bart_optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5)
 
 bart.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),
+    optimizer=bart_optimizer,
     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
     metrics=tf.metrics.SparseCategoricalAccuracy(),
 )
+model_saver(bart,bart_optimizer)
+import datetime
+current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+log_dir = 'logs/fit/' + current_time
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-
-bart.fit(x=token_summary, y=token_target,batch_size=8, epochs=3)
+bart.fit(x={"input_ids" : token_summary,"decoder_input_ids": token_target[:,:-1]}, 
+y=token_target[:,1:],
+validation_data=({"input_ids" : valid_token_summary,"decoder_input_ids":valid_token_target[:,:-1]},valid_token_target[:,1:]),
+batch_size=8, epochs=3,
+callbacks=[tensorboard_callback])
