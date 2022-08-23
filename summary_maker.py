@@ -3,6 +3,7 @@ import os
 import numpy as np
 from transformers import pipeline
 from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
+from tqdm import tqdm,trange
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
@@ -52,27 +53,27 @@ def summary_maker(RANGE=10, length=800,file="train",is_model_or_given_dataset=Tr
     summary=[]
 
     truncated_target=[]
-    if RANGE is not 0:
+    if RANGE != 0:
         whole_data=total_target[0][:RANGE]
     else:
         whole_data=total_target[0]
-    for t in whole_data:
+    for t in tqdm(whole_data):
         tt=(' ').join(t.split()[:length])
-        print(len(tt))
+        #print(len(tt))
         truncated_target.append(tt)
         if is_model_or_given_dataset:
             s=summarizer(tt,max_length=130, min_length=30, do_sample=False)
             summary.append(s[0]["summary_text"])
         
     if is_model_or_given_dataset is False:
-        if RANGE is not 0:
+        if RANGE != 0:
             summary=total_source[0][:RANGE]
         else:
             summary=total_source[0]
     
     token_summary=tokenizer(summary,return_tensors="tf",padding='longest', truncation=True).input_ids
-    token_target=tokenizer(truncated_target,return_tensors="tf",padding='longest', truncation=True).input_ids
     print(token_summary.shape)
+    token_target=tokenizer(truncated_target,return_tensors="tf",padding='longest', truncation=True).input_ids
     print(token_target.shape)
 
 

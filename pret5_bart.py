@@ -5,7 +5,7 @@ import tensorflow as tf
 import os
 import numpy as np
 import torch
-tf.config.set_visible_devices([], 'GPU') # CPU로 학습하기.
+#tf.config.set_visible_devices([], 'GPU') # CPU로 학습하기.
 from summary_maker import *
 
 # mirrored_strategy = tf.distribute.MirroredStrategy()
