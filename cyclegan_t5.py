@@ -10,8 +10,8 @@ import consts
 
 #tf.debugging.set_log_device_placement(True)
 #tf.config.set_visible_devices([], 'GPU') # CPU로 학습하기.
-# mirrored_strategy = tf.distribute.MirroredStrategy()
-# gpus = tf.config.experimental.list_logical_devices('GPU') # 멀티 gpu 세팅.
+mirrored_strategy = tf.distribute.MirroredStrategy()
+gpus = tf.config.experimental.list_logical_devices('GPU') # 멀티 gpu 세팅.
 
 from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM,TFAutoModel
 
