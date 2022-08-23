@@ -241,12 +241,12 @@ for epoch in trange(consts.EPOCHS):
             tf.summary.scalar('dec_disc_loss', train_dec_disc_loss.result(), step=epoch)
             tf.summary.scalar('dec_enc_cycled_loss', train_enc_cycled_loss.result(), step=epoch)
             tf.summary.scalar('dec_enc_cycled_accuracy', train_enc_cycled_accuracy.result(), step=epoch)
-        if batch % 100 ==0 :
-            # wr2.writerow([float(train_enc_gen_loss.result()),float(train_enc_gen_accuracy.result()),float(train_enc_disc_loss.result()),
-            # float(train_dec_gen_loss.result()),float(train_dec_gen_accuracy.result()),float(train_dec_disc_loss.result()),float(train_enc_cycled_loss.result()),
-            # float(train_enc_cycled_accuracy.result())])
-            print(f'Epoch {epoch + 1} Batch {batch} Encoder_Gen_Loss: {train_enc_gen_loss.result():.4f} | Accuracy: {train_enc_gen_accuracy.result():.4f}| Encoder_Disc_Loss: {train_enc_disc_loss.result():.4f} | Decoder_Gen_Loss: {train_dec_gen_loss.result():.4f} | Accuracy: {train_dec_gen_accuracy.result():.4f} | Decoder_Disc_Loss: {train_dec_disc_loss.result():.4f}')
-            print(f'| Encoder_Cycle_Loss: {train_enc_cycled_loss.result():.4f} | Accuracy: {train_enc_cycled_accuracy.result():.4f}')
+        # if batch % 100 ==0 :
+        #     # wr2.writerow([float(train_enc_gen_loss.result()),float(train_enc_gen_accuracy.result()),float(train_enc_disc_loss.result()),
+        #     # float(train_dec_gen_loss.result()),float(train_dec_gen_accuracy.result()),float(train_dec_disc_loss.result()),float(train_enc_cycled_loss.result()),
+        #     # float(train_enc_cycled_accuracy.result())])
+        #     print(f'Epoch {epoch + 1} Batch {batch} Encoder_Gen_Loss: {train_enc_gen_loss.result():.4f} | Accuracy: {train_enc_gen_accuracy.result():.4f}| Encoder_Disc_Loss: {train_enc_disc_loss.result():.4f} | Decoder_Gen_Loss: {train_dec_gen_loss.result():.4f} | Accuracy: {train_dec_gen_accuracy.result():.4f} | Decoder_Disc_Loss: {train_dec_disc_loss.result():.4f}')
+        #     print(f'| Encoder_Cycle_Loss: {train_enc_cycled_loss.result():.4f} | Accuracy: {train_enc_cycled_accuracy.result():.4f}')
     
     ckpt_save_path = ckpt_manager.save()
     print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
