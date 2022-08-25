@@ -71,18 +71,15 @@ def summary_maker(RANGE=10, length=800,file="train",is_model_or_given_dataset=Tr
             summary=total_source[0][:RANGE]
         else:
             summary=total_source[0]
-    print(len(truncated_target))
-    print(len(summary))
     token_summary=tokenizer(summary,return_tensors="tf",padding='longest', truncation=True).input_ids
     print(token_summary.shape)
     token_target=tokenizer(truncated_target,return_tensors="tf",padding='longest', truncation=True).input_ids
     print(token_target.shape)
 
-
     npsummary=np.array(summary)
     nptoken_summary=token_summary.numpy()
     nptoken_target=token_target.numpy()
-    createFolder("bart/"+file)
-    np.save("./bart/"+file +"/summary",npsummary)
-    np.save("./bart/"+file +"/token_summary",nptoken_summary)
-    np.save("./bart/"+file +"/token_target",nptoken_target)
+    createFolder("npdata/"+file)
+    np.save("./npdata/"+file +"/summary",npsummary)
+    np.save("./npdata/"+file +"/token_summary",nptoken_summary)
+    np.save("./npdata/"+file +"/token_target",nptoken_target)

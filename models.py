@@ -113,7 +113,7 @@ class My_Encoder_tiny_T5(tf.keras.Model):
 
 class My_Disc(tf.keras.Model):
 
-    def __init__(self, model,vocab_size,length,dim,rate=0.1):
+    def __init__(self, vocab_size,length,dim,rate=0.1):
         super().__init__()
         self.vocab_size=vocab_size
         self.length=length
@@ -135,7 +135,21 @@ class My_Disc(tf.keras.Model):
         
         final_output=self.Dense(dropout)
         return final_output #(b,1)
-    
+
+    def sample_gumbel(self,shape, eps=1e-20):
+        U = tf.random.uniform(shape, minval=0, maxval=1)
+        return -tf.math.log(-tf.math.log(U + eps) + eps)
+
+    def gumbel_softmax(self,logits, temperature, hard=False):
+        gumbel_softmax_sample = logits + self.sample_gumbel(tf.shape(logits))
+        y = tf.nn.softmax(gumbel_softmax_sample / temperature)
+        if hard:
+            k = tf.shape(logits)[-1]
+            y_hard = tf.cast(tf.equal(y, tf.math.reduce_max(y, 1, keepdims=True)),
+                            y.dtype)
+            y = tf.stop_gradient(y_hard - y) + y
+
+        return y
     def embedding(self,input,input_vocab_size,d_model,length,is_first=False):
         embedding=input
         if is_first is True:
@@ -144,11 +158,13 @@ class My_Disc(tf.keras.Model):
             # (b,len) -> (b,len,max_vocab)이 될거 아니야.
             # 그리고 의미상으로도 그게 맞고.
             # 그리고 is_first가 false인 녀석은 gumbel softmax로 똑같이 처리해주면 되니깐은.
+        else :
+            embedding=self.gumbel_softmax(embedding,0.5,hard=True) # gumbel softmax로 one-hot encoding해준 것과 비슷한 결과를 얻는다.
         
-
         embedding=self.Emb_Dense(embedding) 
-        embedding *= tf.math.sqrt(tf.cast(d_model, tf.float32))
-        embedding += positional_encoding(length,d_model)[:, :length, :]
+        # embedding *= tf.math.sqrt(tf.cast(d_model, tf.float32))
+        # embedding += positional_encoding(length,d_model)[:, :length, :] 
+        # transformer에 입력으로 들어가는게 아니기 때문에, positional encoding은 사실 필요가 없다.
         
         return embedding
 
@@ -177,7 +193,7 @@ class SparseCategorical_Loss():
         return self.LAMBDA*(tf.reduce_sum(loss_)/tf.reduce_sum(mask))
 
     def summary_accuracy_function(self,summary,pred):
-        accuracies = tf.equal(summary, tf.argmax(pred, axis=2,output_type=tf.int64))
+        accuracies = tf.equal(summary, tf.argmax(pred, axis=2,output_type=summary.dtype))
 
         mask = tf.math.logical_not(tf.math.equal(summary, 0))
         accuracies = tf.math.logical_and(mask, accuracies)
@@ -188,7 +204,7 @@ class SparseCategorical_Loss():
 
 
     def reconstruction_accuracy_function(self,real, pred):
-        accuracies = tf.equal(real, tf.argmax(pred, axis=2,output_type=tf.int64))# int64가 아니면 type이 다르다고 오류남
+        accuracies = tf.equal(real, tf.argmax(pred, axis=2,output_type=real.dtype))# int64가 아니면 type이 다르다고 오류남
 
         mask = tf.math.logical_not(tf.math.equal(real, 0))
         accuracies = tf.math.logical_and(mask, accuracies)
