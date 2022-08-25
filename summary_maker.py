@@ -57,6 +57,7 @@ def summary_maker(RANGE=10, length=800,file="train",is_model_or_given_dataset=Tr
         whole_data=total_target[0][:RANGE]
     else:
         whole_data=total_target[0]
+    print(len(whole_data))
     for t in tqdm(whole_data):
         tt=(' ').join(t.split()[:length])
         #print(len(tt))
@@ -70,7 +71,8 @@ def summary_maker(RANGE=10, length=800,file="train",is_model_or_given_dataset=Tr
             summary=total_source[0][:RANGE]
         else:
             summary=total_source[0]
-    
+    print(len(truncated_target))
+    print(len(summary))
     token_summary=tokenizer(summary,return_tensors="tf",padding='longest', truncation=True).input_ids
     print(token_summary.shape)
     token_target=tokenizer(truncated_target,return_tensors="tf",padding='longest', truncation=True).input_ids
