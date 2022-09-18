@@ -8,8 +8,8 @@ from tqdm import tqdm,trange
 tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
-def model_saver(model,optimizer,file_name='pret5_bart'):
-    checkpoint_path = "./MY_checkpoints/train_"+file_name
+def model_saver(model,optimizer,filename='pret5_bart'):
+    checkpoint_path = "./MY_checkpoints/train_"+filename
 
     ckpt = tf.train.Checkpoint(bart=model,optimizer=optimizer)
 
@@ -30,9 +30,16 @@ def createFolder(directory):
                 os.makedirs(directory)
         except OSError:
             print('Error Creating directory. ' + directory)
-def summary_maker(RANGE=10, length=800,file="train",is_model_or_given_dataset=True):
+def summary_maker(START=0,RANGE=10, length=800,file="train",is_model_or_given_dataset=True):
     total_source=[]
-    with open("writingPrompts/"+ file +".wp_source", encoding='UTF8') as f:
+    T=file
+    if file=="_train":
+        T="train"
+    elif file=="_valid":
+        T="valid"
+    
+
+    with open("writingPrompts/"+ T +".wp_source", encoding='UTF8') as f:
         stories = f.readlines()
         stories = [" ".join(i.split()[0:1000]) for i in stories]
         temp_stories=[]
@@ -42,7 +49,7 @@ def summary_maker(RANGE=10, length=800,file="train",is_model_or_given_dataset=Tr
 
     total_target=[]
 
-    with open("writingPrompts/"+ file +".wp_target", encoding='UTF8') as f:
+    with open("writingPrompts/"+ T +".wp_target", encoding='UTF8') as f:
         stories = f.readlines()
         stories = [" ".join(i.split()[0:1000]) for i in stories]
         temp_stories=[]
@@ -53,33 +60,58 @@ def summary_maker(RANGE=10, length=800,file="train",is_model_or_given_dataset=Tr
     summary=[]
 
     truncated_target=[]
+    whole_data=[]
+    #print(START)
+    #print(RANGE)
+    #print(len(total_target[0]))
+    #print(len(total_target[0][START:RANGE]))
     if RANGE != 0:
-        whole_data=total_target[0][:RANGE]
+        whole_data=total_target[0][START:START+RANGE]
     else:
         whole_data=total_target[0]
-    print(len(whole_data))
+
+    print("whole data: " + str(len(whole_data)))
     for t in tqdm(whole_data):
         tt=(' ').join(t.split()[:length])
-        #print(len(tt))
-        truncated_target.append(tt)
+        if len(tt)==0:
+            continue
+        #print('len: '+str(len(tt)))
+        
         if is_model_or_given_dataset:
-            s=summarizer(tt,max_length=130, min_length=30, do_sample=False)
-            summary.append(s[0]["summary_text"])
+            try :
+                s=summarizer(tt,max_length=100, min_length=30, do_sample=False)
+                truncated_target.append(tt)
+                summary.append(s[0]["summary_text"])
+            except:
+                continue
+        else:
+            truncated_target.append(tt)
         
     if is_model_or_given_dataset is False:
         if RANGE != 0:
-            summary=total_source[0][:RANGE]
+            summary=total_source[0][START:START+RANGE]
         else:
             summary=total_source[0]
-    token_summary=tokenizer(summary,return_tensors="tf",padding='longest', truncation=True).input_ids
+    token_summary=tokenizer(summary,return_tensors="tf",padding="max_length",max_length=100, truncation=True).input_ids
     print(token_summary.shape)
-    token_target=tokenizer(truncated_target,return_tensors="tf",padding='longest', truncation=True).input_ids
+    token_target=tokenizer(truncated_target,return_tensors="tf",padding="max_length", max_length=1024,truncation=True).input_ids
     print(token_target.shape)
 
     npsummary=np.array(summary)
     nptoken_summary=token_summary.numpy()
     nptoken_target=token_target.numpy()
+    
     createFolder("npdata/"+file)
+    print(os.path.isfile("./npdata/"+file+"/summary.npy"))
+    if os.path.isfile("./npdata/"+file+"/summary.npy"):
+        past=np.load("./npdata/"+file+"/summary.npy")
+        npsummary=np.concatenate((past,npsummary),axis=0)
     np.save("./npdata/"+file +"/summary",npsummary)
+    if os.path.isfile("./npdata/"+file+"/token_summary.npy"):
+        past=np.load("./npdata/"+file+"/token_summary.npy")
+        nptoken_summary=np.concatenate((past,nptoken_summary),axis=0)
     np.save("./npdata/"+file +"/token_summary",nptoken_summary)
+    if os.path.isfile("./npdata/"+file+"/token_target.npy"):
+        past=np.load("./npdata/"+file+"/token_target.npy")
+        nptoken_target=np.concatenate((past,nptoken_target),axis=0)
     np.save("./npdata/"+file +"/token_target",nptoken_target)
