@@ -1,11 +1,11 @@
 LAMBDA=10 #ae loss에 곱해지는 비율
 ALPHA=1 # gan loss에 곱해지는 비율
 GAMMA=0.01 # cycled loss에 곱해지는 비율. 참고로 cycled loss는 ae loss이니, 여기에 lambda가 곱해져 있다고 보면 됨.
-BATCH_SIZE=3
+BATCH_SIZE=2
 LONG_MAX=850
 SHORT_MAX=100
 DIM=64 # T5 tiny dimension
 DIS_DIM=32 # bert tiny dimension
 FILE_NAME="cycle_gan"
-EPOCHS=20
-LEARNING_RATE=0.001 # 0.0001 보다 크면, 학습이 제대로 되지 않는다!!
+EPOCHS=100
+LEARNING_RATE=1e-9 # 0.0001 보다 크면, 학습이 제대로 되지 않는다!!
