@@ -69,7 +69,8 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
         whole_data=total_target[0][START:START+RANGE]
     else:
         whole_data=total_target[0]
-
+    max_sum=0
+    max_target=0
     print("whole data: " + str(len(whole_data)))
     for t in tqdm(whole_data):
         tt=('.').join(t.split('.')[:seq_length])
@@ -79,10 +80,15 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
         
         if is_model_or_given_dataset:
             try :
-                s=summarizer(tt,max_length=50, min_length=10, do_sample=False)
+                s=summarizer(tt,max_length=80, min_length=10, do_sample=True)
                 truncated_target.append(tt)
                 summary.append(s[0]["summary_text"])
-            except:
+                if (len(tt)>max_target):
+                    max_target=len(tt)
+                if (len(s[0]["summary_text"])>max_sum):
+                    max_sum=len(s[0]["summary_text"])
+
+            except :
                 continue
         else:
             truncated_target.append(tt)
@@ -92,9 +98,9 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
             summary=total_source[0][START:START+RANGE]
         else:
             summary=total_source[0]
-    token_summary=tokenizer(summary,return_tensors="tf",padding="max_length",max_length=100, truncation=True).input_ids
+    token_summary=tokenizer(summary,return_tensors="tf",padding="max_length",max_length=max_sum, truncation=True).input_ids
     print(token_summary.shape)
-    token_target=tokenizer(truncated_target,return_tensors="tf",padding="max_length", max_length=1024,truncation=True).input_ids
+    token_target=tokenizer(truncated_target,return_tensors="tf",padding="max_length", max_length=max_target,truncation=True).input_ids
     print(token_target.shape)
 
     npsummary=np.array(summary)

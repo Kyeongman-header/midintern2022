@@ -69,7 +69,8 @@ log_dir = 'logs/third/' + current_time
 train_summary_writer = tf.summary.create_file_writer(log_dir)
 MAX_VOCAB = 50264
 my_disc=My_Disc(vocab_size=MAX_VOCAB,length=target_length,dim=32)
-ae_loss=SparseCategorical_Loss(LAMBDA=consts.LAMBDA)
+print(tokenizer("<pad>")['input_ids'])
+ae_loss=SparseCategorical_Loss(LAMBDA=consts.LAMBDA,PAD=tokenizer("<pad>")['input_ids'][1]) # bart tokenizer는 pad가 1이다... 0이 아니라!!
 gan_loss=DiscriminatorAndGenerator_Loss(ALPHA=consts.ALPHA)
 
 train_cce_loss=tf.keras.metrics.Mean(name='train_cce_loss')
@@ -85,24 +86,24 @@ val_disc_loss=tf.keras.metrics.Mean(name='val_enc_disc_loss')
 def train_step(token_summary, token_target,val_token_summary,val_token_target): 
     
     with tf.GradientTape(persistent=True) as tape:
-        bart_output=bart({"input_ids" : token_summary,"decoder_input_ids": token_target[:-1]}).logits
-        sparse_loss=ae_loss.reconstruction_loss(token_target[1:],bart_output)
+        bart_output=bart({"input_ids" : token_summary,"decoder_input_ids": token_target[:,:-1]}).logits
+        sparse_loss=ae_loss.reconstruction_loss(token_target[:,1:],bart_output)
         #disc_fake=my_disc(bart_output,is_first=False)
-        #disc_true=my_disc(token_target[1:],is_first=True)
+        #disc_true=my_disc(token_target[:,1:],is_first=True)
         #_gan_loss=gan_loss.gen_loss(disc_fake)
         _gan_loss=0
         #cri_loss=gan_loss.critic_loss(disc_true,disc_fake)
         cri_loss=0
         #total_gen_loss=consts.GAMMA*_gan_loss+sparse_loss
-        val_bart_output=bart({"input_ids" : val_token_summary,"decoder_input_ids": val_token_target[:-1]}).logits
-        val_sparse_loss=ae_loss.reconstruction_loss(val_token_target[1:],val_bart_output)
+        val_bart_output=bart({"input_ids" : val_token_summary,"decoder_input_ids": val_token_target[:,:-1]}).logits
+        val_sparse_loss=ae_loss.reconstruction_loss(val_token_target[:,1:],val_bart_output)
         val_cri_loss=0
         _val_gan_loss=0
 
     train_cce_accuracy(ae_loss.reconstruction_accuracy_function(token_target[1:],bart_output))
     val_cce_accuracy(ae_loss.reconstruction_accuracy_function(val_token_target[1:],val_bart_output))
     train_cce_loss(sparse_loss)
-    val_cce_accuracy(val_sparse_loss)
+    val_cce_loss(val_sparse_loss)
     train_gan_loss(_gan_loss)
     val_gan_loss(_val_gan_loss)
     train_disc_loss(cri_loss)
@@ -131,6 +132,7 @@ for epoch in trange(consts.EPOCHS):
     train_gan_loss.reset_states()
     train_disc_loss.reset_states()
     print("")
+    generate_random=random.randrange(90,110)
     #print(token_summary.shape)
     #print(token_target.shape)
     for batch in trange(token_summary.shape[0]):
@@ -158,13 +160,13 @@ for epoch in trange(consts.EPOCHS):
                 wr2.writerow([train_cce_loss.result(), train_cce_accuracy.result(),train_disc_loss.result(),train_gan_loss.result()])
                 tensorboard_count=tensorboard_count+1
         if batch % 100 == 0:
-            bart_t_output=bart({"input_ids" : summary,"decoder_input_ids": target[:-1]}).logits
+            bart_t_output=bart({"input_ids" : summary,"decoder_input_ids": target[:,:-1]}).logits
             bart_t_output=tf.argmax(bart_t_output,axis=2,output_type=target.dtype)[0]
             bart_g_output=bart.generate(summary)
             origin=tokenizer.decode(target[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
             summary= tokenizer.decode(summary[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
             g_output=tokenizer.decode(bart_g_output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
-            t_output=tokenizer.decode(bart_t_output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+            t_output=tokenizer.decode(bart_t_output, skip_special_tokens=True, clean_up_tokenization_spaces=False)
             wr.writerow([origin,summary,t_output,g_output])
             with train_summary_writer.as_default():
                 tf.summary.scalar('bleu_gen',sentence_bleu([origin],g_output),step=gen_count)
@@ -176,6 +178,7 @@ for epoch in trange(consts.EPOCHS):
         #ckpt_save_path = ckpt_manager.save()
         #print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
     print(f'Epoch {epoch + 1} CCE_Loss: {train_cce_loss.result():.4f} | CCE_Accuracy: {train_cce_accuracy.result():.4f}| GAN_Loss: {train_gan_loss.result():.4f} | Disc_Loss: {train_disc_loss.result():.4f}')
+    print(f'VAL_CCE_Loss: {val_cce_loss.result():.4f} | VAL_CCE_Accuracy: {val_cce_accuracy.result():.4f}| VAL_GAN_Loss: {val_gan_loss.result():.4f} | VAL_Disc_Loss: {val_disc_loss.result():.4f}')
     print(f'Time taken for 1 epoch: {time.time() - start:.2f} secs\n')
 
 ckpt_save_path = ckpt_manager.save()
