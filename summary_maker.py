@@ -30,12 +30,12 @@ def createFolder(directory):
                 os.makedirs(directory)
         except OSError:
             print('Error Creating directory. ' + directory)
-def summary_maker(START=0,RANGE=10, length=800,file="train",is_model_or_given_dataset=True):
+def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_given_dataset=True):
     total_source=[]
     T=file
-    if file=="_train":
+    if "train" in file:
         T="train"
-    elif file=="_valid":
+    elif "valid" in file:
         T="valid"
     
 
@@ -72,14 +72,14 @@ def summary_maker(START=0,RANGE=10, length=800,file="train",is_model_or_given_da
 
     print("whole data: " + str(len(whole_data)))
     for t in tqdm(whole_data):
-        tt=(' ').join(t.split()[:length])
+        tt=('.').join(t.split('.')[:seq_length])
         if len(tt)==0:
             continue
         #print('len: '+str(len(tt)))
         
         if is_model_or_given_dataset:
             try :
-                s=summarizer(tt,max_length=100, min_length=30, do_sample=False)
+                s=summarizer(tt,max_length=50, min_length=10, do_sample=False)
                 truncated_target.append(tt)
                 summary.append(s[0]["summary_text"])
             except:
