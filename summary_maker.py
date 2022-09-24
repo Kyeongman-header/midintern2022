@@ -83,10 +83,10 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
                 s=summarizer(tt,max_length=80, min_length=10, do_sample=True)
                 truncated_target.append(tt)
                 summary.append(s[0]["summary_text"])
-                if (len(tt)>max_target):
+                if (len(tt.split(' '))>max_target):
                     max_target=len(tt.split(' '))
                     print(max_target)
-                if (len(s[0]["summary_text"])>max_sum):
+                if (len(s[0]["summary_text"].split(' '))>max_sum):
                     max_sum=len(s[0]["summary_text"].split(' '))
                     print(max_sum)
 
