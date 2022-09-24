@@ -84,9 +84,11 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
                 truncated_target.append(tt)
                 summary.append(s[0]["summary_text"])
                 if (len(tt)>max_target):
-                    max_target=len(tt)
+                    max_target=len(tt.split(' '))
+                    print(max_target)
                 if (len(s[0]["summary_text"])>max_sum):
-                    max_sum=len(s[0]["summary_text"])
+                    max_sum=len(s[0]["summary_text"].split(' '))
+                    print(max_sum)
 
             except :
                 continue
@@ -98,9 +100,9 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
             summary=total_source[0][START:START+RANGE]
         else:
             summary=total_source[0]
-    token_summary=tokenizer(summary,return_tensors="tf",padding="max_length",max_length=max_sum, truncation=True).input_ids
+    token_summary=tokenizer(summary,return_tensors="tf",padding="max_length",max_length=100, truncation=True).input_ids
     print(token_summary.shape)
-    token_target=tokenizer(truncated_target,return_tensors="tf",padding="max_length", max_length=max_target,truncation=True).input_ids
+    token_target=tokenizer(truncated_target,return_tensors="tf",padding="max_length", max_length=max_target+100,truncation=True).input_ids
     print(token_target.shape)
 
     npsummary=np.array(summary)
