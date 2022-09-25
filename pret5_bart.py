@@ -1,5 +1,5 @@
 from re import T
-from datasets import load_dataset
+#from datasets import load_dataset
 import time
 import tensorflow as tf
 import os
@@ -100,8 +100,8 @@ def train_step(token_summary, token_target,val_token_summary,val_token_target):
         val_cri_loss=0
         _val_gan_loss=0
 
-    train_cce_accuracy(ae_loss.reconstruction_accuracy_function(token_target[1:],bart_output))
-    val_cce_accuracy(ae_loss.reconstruction_accuracy_function(val_token_target[1:],val_bart_output))
+    train_cce_accuracy(ae_loss.reconstruction_accuracy_function(token_target[:,1:],bart_output))
+    val_cce_accuracy(ae_loss.reconstruction_accuracy_function(val_token_target[:,1:],val_bart_output))
     train_cce_loss(sparse_loss)
     val_cce_loss(val_sparse_loss)
     train_gan_loss(_gan_loss)
@@ -132,7 +132,7 @@ for epoch in trange(consts.EPOCHS):
     train_gan_loss.reset_states()
     train_disc_loss.reset_states()
     print("")
-    generate_random=random.randrange(90,110)
+    #generate_random=random.randrange(90,110)
     #print(token_summary.shape)
     #print(token_target.shape)
     for batch in trange(token_summary.shape[0]):
