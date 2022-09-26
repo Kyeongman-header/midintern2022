@@ -1,4 +1,4 @@
-import tensorflow as tfi
+import tensorflow as tf
 import os
 import numpy as np
 from transformers import pipeline
