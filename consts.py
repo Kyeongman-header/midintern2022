@@ -1,6 +1,6 @@
 LAMBDA=10 #ae loss에 곱해지는 비율
 ALPHA=1 # gan loss에 곱해지는 비율
-GAMMA=0.01 # cycled loss에 곱해지는 비율. 참고로 cycled loss는 ae loss이니, 여기에 lambda가 곱해져 있다고 보면 됨.
+GAMMA=0.1 # cycled loss에 곱해지는 비율. 참고로 cycled loss는 ae loss이니, 여기에 lambda가 곱해져 있다고 보면 됨.
 BATCH_SIZE=2
 LONG_MAX=850
 SHORT_MAX=100

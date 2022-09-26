@@ -4,7 +4,7 @@ from summary_maker import *
 import consts
 mirrored_strategy = tf.distribute.MirroredStrategy()
 gpus = tf.config.experimental.list_logical_devices('GPU') # 멀티 gpu 세팅.
-RANGE=0
+RANGE=consts.BATCH_SIZE*10
 
 TRAIN_FILE="_sm_train_whole"
 VALID_FILE="_sm_valid_whole"

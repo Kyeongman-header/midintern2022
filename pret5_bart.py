@@ -11,15 +11,15 @@ from models import *
 import consts
 from tqdm import tqdm, trange
 
-mirrored_strategy = tf.distribute.MirroredStrategy()
-gpus = tf.config.experimental.list_logical_devices('GPU') # 멀티 gpu 세팅.
+#mirrored_strategy = tf.distribute.MirroredStrategy()
+#gpus = tf.config.experimental.list_logical_devices('GPU') # 멀티 gpu 세팅.
 # tf.debugging.set_log_device_placement(True)
-RANGE=consts.BATCH_SIZE*2900
+RANGE=consts.BATCH_SIZE*3500
 
 #TRAIN_FILE="train"
 #VALID_FILE="valid"
-TRAIN_FILE="_sm_train"
-VALID_FILE="_sm_valid"
+TRAIN_FILE="_sm_train_whole"
+VALID_FILE="_sm_valid_whole"
 #위의 두개는 #bart large cnn 압축 데이터이다.
 FURTHER_TRAIN=False
 #summary_maker(RANGE=RANGE,length=800,file=TRAIN_FILE,is_model_or_given_dataset=False)
@@ -58,7 +58,7 @@ disc_optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5)
 #     
 #     metrics=tf.metrics.SparseCategoricalAccuracy(),
 # )
-filename="NOGAN_PRET_SM"
+filename="NOGAN_PRET_WHOLE"
 ckpt_manager=model_saver(bart,bart_optimizer,filename=filename)
 # GAN / NOGAN
 # PRET / NOPRET
