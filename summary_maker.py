@@ -6,7 +6,7 @@ from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
 from tqdm import tqdm,trange
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn",device=0)
 
 def model_saver(model,optimizer,filename='pret5_bart'):
     checkpoint_path = "./MY_checkpoints/train_"+filename
