@@ -38,13 +38,14 @@ import csv
 import tqdm
 import others
 
+WHOLE_PAGE=53
 f=open('tor_fictions.csv','w',encoding='utf-8',newline='')
 wr=csv.writer(f)
 whole_seq_length=[]
 count=1
 wr.writerow(['index','fictions','Sequence_length'])
 
-for i in range(1):
+for i in range(WHOLE_PAGE):
 	texts,seq_lengths=page_scrapper(i)
 	for t in range(len(texts)):
 		wr.writerow([count,texts[t],seq_lengths[t]])
