@@ -1,4 +1,4 @@
-import tensorflow as tf
+import tensorflow as tfi
 import os
 import numpy as np
 from transformers import pipeline
@@ -77,6 +77,12 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
     max_target=0
     print("whole data: " + str(len(whole_data)))
     for t in tqdm(whole_data):
+        # t에서 ;이랑 .. 같은 애들 . 으로 바꿔야 겠다
+        t.replace(".....",".")
+        t.replace("....",".")
+        t.replace("...",".")
+        t.replace("..",".")
+        
         if seq_length<=0:
             tt=t
         else:
@@ -84,11 +90,12 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
         if len(tt)==0:
             continue
         #print('len: '+str(len(tt)))
-        len(tokenizer(tt).input_ids)
+        #print(len(tokenizer(tt).input_ids))
         if is_model_or_given_dataset:
             if len(tokenizer(tt).input_ids)<1024:
                 try :
-                    s=summarizer(tt,max_length=130, min_length=50, do_sample=True)
+                    s=summarizer(tt,max_length=100, min_length=50, do_sample=True)
+
                     truncated_target.append(tt)
                     summary.append(s[0]["summary_text"])
                     if (len(tt.split(' '))>max_target):
