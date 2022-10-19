@@ -36,14 +36,27 @@ def page_scrapper(n):
 
 import csv
 import tqdm
+import others
+
 f=open('tor_fictions.csv','w',encoding='utf-8',newline='')
 wr=csv.writer(f)
 whole_seq_length=[]
 count=1
 wr.writerow(['index','fictions','Sequence_length'])
 
-for i in range(53):
+for i in range(1):
 	texts,seq_lengths=page_scrapper(i)
 	for t in range(len(texts)):
 		wr.writerow([count,texts[t],seq_lengths[t]])
 		count=count+1
+f.close()
+
+# f = open('tor_fictions.csv', 'r', encoding='utf-8')
+# rdr = csv.reader(f)
+# # print(rdr)
+# for line in rdr:
+# 	print(line[0])
+	
+# 	input()
+
+# f.close()    
