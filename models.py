@@ -161,6 +161,8 @@ class My_Disc(tf.keras.Model):
         else :
             embedding=self.gumbel_softmax(embedding,0.5,hard=True) # gumbel softmax로 one-hot encoding해준 것과 비슷한 결과를 얻는다.
         
+        #print(embedding.shape)        
+        
         embedding=self.Emb_Dense(embedding) 
         # embedding *= tf.math.sqrt(tf.cast(d_model, tf.float32))
         # embedding += positional_encoding(length,d_model)[:, :length, :] 
@@ -169,13 +171,14 @@ class My_Disc(tf.keras.Model):
         return embedding
 
 class SparseCategorical_Loss():
-    def __init__(self,LAMBDA=1):
+    def __init__(self,LAMBDA=1,PAD=0):
         super().__init__()
         self.loss_object=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
         self.LAMBDA=LAMBDA
+        self.pad=PAD
 
     def summary_loss(self,logits, pred): # CUSTOM LOSS.
-        mask = tf.math.logical_not(tf.math.equal(logits, 0))
+        mask = tf.math.logical_not(tf.math.equal(logits, self.pad))
 
         loss_ = self.loss_object(logits, pred)
 
@@ -184,7 +187,7 @@ class SparseCategorical_Loss():
         return self.LAMBDA* (tf.reduce_sum(loss_)/tf.reduce_sum(mask))
 
     def reconstruction_loss(self,real,pred): #fake input과 실제input의 reconstruction loss
-        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        mask = tf.math.logical_not(tf.math.equal(real, self.pad))
         loss_ = self.loss_object(real, pred)
 
         mask = tf.cast(mask, dtype=loss_.dtype) #mask가 되어있던 자리는 학습을 하지 않는다
@@ -195,7 +198,7 @@ class SparseCategorical_Loss():
     def summary_accuracy_function(self,summary,pred):
         accuracies = tf.equal(summary, tf.argmax(pred, axis=2,output_type=summary.dtype))
 
-        mask = tf.math.logical_not(tf.math.equal(summary, 0))
+        mask = tf.math.logical_not(tf.math.equal(summary, self.pad))
         accuracies = tf.math.logical_and(mask, accuracies)
 
         accuracies = tf.cast(accuracies, dtype=tf.float32)
@@ -206,7 +209,7 @@ class SparseCategorical_Loss():
     def reconstruction_accuracy_function(self,real, pred):
         accuracies = tf.equal(real, tf.argmax(pred, axis=2,output_type=real.dtype))# int64가 아니면 type이 다르다고 오류남
 
-        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        mask = tf.math.logical_not(tf.math.equal(real, self.pad))
         accuracies = tf.math.logical_and(mask, accuracies)
 
         accuracies = tf.cast(accuracies, dtype=tf.float32)

@@ -11,15 +11,15 @@ from models import *
 import consts
 from tqdm import tqdm, trange
 
-#mirrored_strategy = tf.distribute.MirroredStrategy()
-#gpus = tf.config.experimental.list_logical_devices('GPU') # 멀티 gpu 세팅.
+mirrored_strategy = tf.distribute.MirroredStrategy()
+gpus = tf.config.experimental.list_logical_devices('GPU') # 멀티 gpu 세팅.
 # tf.debugging.set_log_device_placement(True)
-RANGE=consts.BATCH_SIZE*3500
+RANGE=consts.BATCH_SIZE*2900
 
 #TRAIN_FILE="train"
 #VALID_FILE="valid"
-TRAIN_FILE="_sm_train_whole"
-VALID_FILE="_sm_valid_whole"
+TRAIN_FILE="_sm_train"
+VALID_FILE="_sm_valid"
 #위의 두개는 #bart large cnn 압축 데이터이다.
 FURTHER_TRAIN=False
 #summary_maker(RANGE=RANGE,length=800,file=TRAIN_FILE,is_model_or_given_dataset=False)
@@ -58,7 +58,7 @@ disc_optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5)
 #     
 #     metrics=tf.metrics.SparseCategoricalAccuracy(),
 # )
-filename="NOGAN_PRET_WHOLE"
+filename="NOGAN_PRET_SM"
 ckpt_manager=model_saver(bart,bart_optimizer,filename=filename)
 # GAN / NOGAN
 # PRET / NOPRET
@@ -88,21 +88,21 @@ def train_step(token_summary, token_target,val_token_summary,val_token_target):
     with tf.GradientTape(persistent=True) as tape:
         bart_output=bart({"input_ids" : token_summary,"decoder_input_ids": token_target[:,:-1]}).logits
         sparse_loss=ae_loss.reconstruction_loss(token_target[:,1:],bart_output)
-        #disc_fake=my_disc(bart_output,is_first=False)#
-        #disc_true=my_disc(token_target[:,1:],is_first=True)#
-        #_gan_loss=gan_loss.gen_loss(disc_fake)#
-        _gan_loss=0
-        #cri_loss=gan_loss.critic_loss(disc_true,disc_fake)#
-        cri_loss=0
-        #total_gen_loss=consts.GAMMA*_gan_loss+sparse_loss#
+        disc_fake=my_disc(bart_output,is_first=False)#
+        disc_true=my_disc(token_target[:,1:],is_first=True)#
+        _gan_loss=gan_loss.gen_loss(disc_fake)#
+        #_gan_loss=0
+        cri_loss=gan_loss.critic_loss(disc_true,disc_fake)#
+        #cri_loss=0
+        total_gen_loss=consts.GAMMA*_gan_loss+sparse_loss#
         val_bart_output=bart({"input_ids" : val_token_summary,"decoder_input_ids": val_token_target[:,:-1]}).logits
         val_sparse_loss=ae_loss.reconstruction_loss(val_token_target[:,1:],val_bart_output)
-        val_cri_loss=0
-        #val_disc_fake=my_disc(val_bart_output,is_first=False)#
-        #val_disc_true=my_disc(val_token_target[:,1:],is_first=True)#
-        #_val_gan_loss=gan_loss.gen_loss(val_disc_fake)#
-        #val_cri_loss=gan_loss.critic_loss(val_disc_true,val_disc_fake)#
-        _val_gan_loss=0
+        #val_cri_loss=0
+        val_disc_fake=my_disc(val_bart_output,is_first=False)#
+        val_disc_true=my_disc(val_token_target[:,1:],is_first=True)#
+        _val_gan_loss=gan_loss.gen_loss(val_disc_fake)#
+        val_cri_loss=gan_loss.critic_loss(val_disc_true,val_disc_fake)#
+        #_val_gan_loss=0
 
     train_cce_accuracy(ae_loss.reconstruction_accuracy_function(token_target[:,1:],bart_output))
     val_cce_accuracy(ae_loss.reconstruction_accuracy_function(val_token_target[:,1:],val_bart_output))
@@ -113,12 +113,12 @@ def train_step(token_summary, token_target,val_token_summary,val_token_target):
     train_disc_loss(cri_loss)
     val_disc_loss(val_cri_loss)
 
-    #gen_gradients = tape.gradient(total_gen_loss, bart.trainable_variables)#
-    gen_gradients = tape.gradient(sparse_loss, bart.trainable_variables) #NO GAN
-    #disc_gradients=tape.gradient(cri_loss,my_disc.trainable_variables)#
+    gen_gradients = tape.gradient(total_gen_loss, bart.trainable_variables)#
+    #gen_gradients = tape.gradient(sparse_loss, bart.trainable_variables) #NO GAN
+    disc_gradients=tape.gradient(cri_loss,my_disc.trainable_variables)#
     
     bart_optimizer.apply_gradients(zip(gen_gradients, bart.trainable_variables))
-    #disc_optimizer.apply_gradients(zip(disc_gradients,my_disc.trainable_variables))#
+    disc_optimizer.apply_gradients(zip(disc_gradients,my_disc.trainable_variables))#
 
 import csv
 from nltk.translate.bleu_score import sentence_bleu

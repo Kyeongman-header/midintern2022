@@ -6,7 +6,9 @@ from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
 from tqdm import tqdm,trange
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+
+#pipeline("summarization", tokenizer=tokenizer,model=TFAutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn"),device=0)
+#pipeline("summarization", model="facebook/bart-large-cnn",device=0)
 
 def model_saver(model,optimizer,filename='pret5_bart'):
     checkpoint_path = "./MY_checkpoints/train_"+filename
@@ -30,7 +32,9 @@ def createFolder(directory):
                 os.makedirs(directory)
         except OSError:
             print('Error Creating directory. ' + directory)
-def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_given_dataset=True):
+def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_given_dataset=True,device=0):
+    summarizer = pipeline("summarization", model="facebook/bart-large-cnn",device=device)
+    #summarizer=pipeline("summarization", tokenizer=tokenizer,model=TFAutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn"),device=0)
     total_source=[]
     T=file
     if "train" in file:
@@ -69,20 +73,33 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
         whole_data=total_target[0][START:START+RANGE]
     else:
         whole_data=total_target[0]
-
+    max_sum=0
+    max_target=0
     print("whole data: " + str(len(whole_data)))
     for t in tqdm(whole_data):
-        tt=('.').join(t.split('.')[:seq_length])
+        if seq_length<=0:
+            tt=t
+        else:
+            tt=('.').join(t.split('.')[:seq_length])
         if len(tt)==0:
             continue
         #print('len: '+str(len(tt)))
-        
+        len(tokenizer(tt).input_ids)
         if is_model_or_given_dataset:
-            try :
-                s=summarizer(tt,max_length=50, min_length=10, do_sample=False)
-                truncated_target.append(tt)
-                summary.append(s[0]["summary_text"])
-            except:
+            if len(tokenizer(tt).input_ids)<1024:
+                try :
+                    s=summarizer(tt,max_length=130, min_length=50, do_sample=True)
+                    truncated_target.append(tt)
+                    summary.append(s[0]["summary_text"])
+                    if (len(tt.split(' '))>max_target):
+                        max_target=len(tt.split(' '))
+                    #print(max_target)
+                    if (len(s[0]["summary_text"].split(' '))>max_sum):
+                        max_sum=len(s[0]["summary_text"].split(' '))
+                    #print(max_sum)
+                except:
+                    continue
+            else:
                 continue
         else:
             truncated_target.append(tt)
@@ -92,12 +109,18 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
             summary=total_source[0][START:START+RANGE]
         else:
             summary=total_source[0]
-    token_summary=tokenizer(summary,return_tensors="tf",padding="max_length",max_length=100, truncation=True).input_ids
+    
+    print(len(summary))
+    print(len(truncated_target))
+    #token_summary=tokenizer(summary,padding="max_length",max_length=150, truncation=True).input_ids
+    token_summary=tokenizer(summary,return_tensors="tf",padding="max_length",max_length=150, truncation=True).input_ids
     print(token_summary.shape)
+    #token_target=tokenizer(truncated_target,padding="max_length", max_length=max_target+100,truncation=True).input_ids
     token_target=tokenizer(truncated_target,return_tensors="tf",padding="max_length", max_length=1024,truncation=True).input_ids
     print(token_target.shape)
 
     npsummary=np.array(summary)
+    #nptarget=np.array(truncated_target)
     nptoken_summary=token_summary.numpy()
     nptoken_target=token_target.numpy()
     
