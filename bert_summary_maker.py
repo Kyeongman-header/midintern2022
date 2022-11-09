@@ -6,12 +6,12 @@ from transformers import pipeline
 from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
 from tqdm import tqdm,trange
 
-tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
 #pipeline("summarization", tokenizer=tokenizer,model=TFAutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn"),device=0)
 #pipeline("summarization", model="facebook/bart-large-cnn",device=0)
 
-def model_saver(model,optimizer,filename='pret5_bart'):
+def model_saver(model,optimizer,filename='pretbert_gpt'):
     checkpoint_path = "./MY_checkpoints/train_"+filename
 
     ckpt = tf.train.Checkpoint(bart=model,optimizer=optimizer)
