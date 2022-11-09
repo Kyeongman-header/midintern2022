@@ -7,7 +7,13 @@ from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
 from tqdm import tqdm,trange
 
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
-
+tokenizer.add_special_tokens({
+      "eos_token": "</s>",
+        "bos_token": "<s>",
+          "unk_token": "<unk>",
+            "pad_token": "<pad>",
+              "mask_token": "<mask>"
+              })
 #pipeline("summarization", tokenizer=tokenizer,model=TFAutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn"),device=0)
 #pipeline("summarization", model="facebook/bart-large-cnn",device=0)
 
@@ -64,7 +70,7 @@ def bert_summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or
         total_target.append(temp_stories)
    
     summary_prefix_target=[]
-
+    summary=[]
     #truncated_target=[]
     whole_data=[]
     #print(START)
@@ -98,8 +104,8 @@ def bert_summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or
                 try :
                     
                     s=summarizer(tt,max_length=200, min_length=50)
-                    
-                    summary_prefix_target.append(s + " : " + tt) # result 자체가 문자열임
+                    summary.append(s)
+                    summary_prefix_target.append(s + " : " + tt + "</s>") # result 자체가 문자열임
                     
                 except:
                     continue
@@ -109,23 +115,24 @@ def bert_summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or
         
     
     print("summary prefix target length :" + str(len(summary_prefix_target)))
+    print("summary length : " + str(len(summary)))
     token_summary_prefix_target=tokenizer(summary_prefix_target,return_tensors="tf",padding="max_length",max_length=1024, truncation=True).input_ids
     print("tokn summary prefix target shape : ")
     print(token_summary_prefix_target.shape)
     
 
-    npsummary_prefix_target=np.array(summary_prefix_target)
+    npsummary=np.array(summary)
     #nptarget=np.array(truncated_target)
     nptoken_summary_prefix_target=token_summary_prefix_target.numpy()
     
     createFolder("npdata/"+file)
 
     print("is this npdata exists already? => ")
-    print(os.path.isfile("./npdata/"+file+"/summary_prefix_target.npy"))
-    if os.path.isfile("./npdata/"+file+"/summary_prefix_target.npy"):
-        past=np.load("./npdata/"+file+"/summary_prefix_target.npy")
-        npsummary_prefix_target=np.concatenate((past,npsummary_prefix_target),axis=0)
-    np.save("./npdata/"+file +"/summary_prefix_target",npsummary_prefix_target)
+    print(os.path.isfile("./npdata/"+file+"/summary.npy"))
+    if os.path.isfile("./npdata/"+file+"/summary.npy"):
+        past=np.load("./npdata/"+file+"/summary.npy")
+        npsummary=np.concatenate((past,npsummary),axis=0)
+    np.save("./npdata/"+file +"/summary",npsummary)
     if os.path.isfile("./npdata/"+file+"/token_summary_prefix_target.npy"):
         past=np.load("./npdata/"+file+"/token_summary_prefix_target.npy")
         nptoken_summary_prefix_target=np.concatenate((past,nptoken_summary_prefix_target),axis=0)
