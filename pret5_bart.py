@@ -14,12 +14,12 @@ from tqdm import tqdm, trange
 #mirrored_strategy = tf.distribute.MirroredStrategy()
 #gpus = tf.config.experimental.list_logical_devices('GPU') # 멀티 gpu 세팅.
 # tf.debugging.set_log_device_placement(True)
-RANGE=consts.BATCH_SIZE*3500
+RANGE=consts.BATCH_SIZE*4500
 
 #TRAIN_FILE="train"
 #VALID_FILE="valid"
-TRAIN_FILE="_sm_train_whole"
-VALID_FILE="_sm_valid_whole"
+TRAIN_FILE="18_train"
+VALID_FILE="18_valid"
 #위의 두개는 #bart large cnn 압축 데이터이다.
 FURTHER_TRAIN=False
 #summary_maker(RANGE=RANGE,length=800,file=TRAIN_FILE,is_model_or_given_dataset=False)
@@ -50,15 +50,15 @@ print(token_target.shape)
 from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
 bart = TFAutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn")
 #bart=TFAutoModelForSeq2SeqLM.from_pretrained("patrickvonplaten/t5-tiny-random")
-bart_optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5)
-disc_optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5)
+bart_optimizer=tf.keras.optimizers.Adam(learning_rate=consts.LEARNING_RATE)
+disc_optimizer=tf.keras.optimizers.Adam(learning_rate=consts.LEARNING_RATE)
 
 # bart.compile(
 #     optimizer=bart_optimizer,
 #     
 #     metrics=tf.metrics.SparseCategoricalAccuracy(),
 # )
-filename="NOGAN_PRET_WHOLE"
+filename="NOGAN_PRET_18"
 ckpt_manager=model_saver(bart,bart_optimizer,filename=filename)
 # GAN / NOGAN
 # PRET / NOPRET
@@ -130,12 +130,19 @@ wr.writerow(['orig_article','summary','ariticle_t','article_g'])
 f2= open(filename+'_loss.csv', 'w', newline='')
 wr2=csv.writer(f2)
 wr2.writerow(['cce_loss','cce_accuracy','disc_loss','gan_loss'])
+early_stop=False
+last_val_cce_loss=100
+
 for epoch in trange(consts.EPOCHS):
+    if early_stop:
+        print("early stop!")
+        break
     start = time.time()
     train_cce_loss.reset_states()
     train_cce_accuracy.reset_states()
     train_gan_loss.reset_states()
     train_disc_loss.reset_states()
+    
     print("")
     #generate_random=random.randrange(90,110)
     #print(token_summary.shape)
@@ -152,7 +159,13 @@ for epoch in trange(consts.EPOCHS):
         train_step(summary,target,val_summary,val_target)
         #print(summary.shape)
         #print(target.shape)
+	
         if batch % 100 == 0:
+            if epoch>5 and val_cce_loss.result()>last_val_cce_loss:
+                early_stop=True
+                break
+            last_val_cce_loss=val_cce_loss.result()  # 마지막 val loss를 저장해서, minimum을 찍었으면 학습을 그만둔다.
+		
             with train_summary_writer.as_default():
                 tf.summary.scalar('cce_loss', train_cce_loss.result(), step=tensorboard_count)
                 tf.summary.scalar('cce_accuracy', train_cce_accuracy.result(), step=tensorboard_count)
@@ -164,12 +177,12 @@ for epoch in trange(consts.EPOCHS):
                 tf.summary.scalar('val_gan_loss', val_gan_loss.result(), step=tensorboard_count)
                 wr2.writerow([train_cce_loss.result(), train_cce_accuracy.result(),train_disc_loss.result(),train_gan_loss.result()])
                 tensorboard_count=tensorboard_count+1
-        if batch % 1000 == 0:
-            bart_t_output=bart({"input_ids" : summary,"decoder_input_ids": target[:,:-1]}).logits
-            bart_t_output=tf.argmax(bart_t_output,axis=2,output_type=target.dtype)[0]
-            bart_g_output=bart.generate(summary)
-            origin=tokenizer.decode(target[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
-            summary= tokenizer.decode(summary[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        if batch % 100 == 0:
+            bart_t_output=bart({"input_ids" : val_summary,"decoder_input_ids": val_target[:,:-1]}).logits
+            bart_t_output=tf.argmax(bart_t_output,axis=2,output_type=val_target.dtype)[0]
+            bart_g_output=bart.generate(val_summary)
+            origin=tokenizer.decode(val_target[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+            summary= tokenizer.decode(val_summary[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
             g_output=tokenizer.decode(bart_g_output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
             t_output=tokenizer.decode(bart_t_output, skip_special_tokens=True, clean_up_tokenization_spaces=False)
             wr.writerow([origin,summary,t_output,g_output])
@@ -179,9 +192,11 @@ for epoch in trange(consts.EPOCHS):
                 gen_count=gen_count+1
             #print(f'\rSaving checkpoint for batch {batch} at {ckpt_save_path}',end="")
         #    print(f'Batch {batch} CCE_Loss: {train_cce_loss.result():.4f} | CCE_Accuracy: {train_cce_accuracy.result():.4f}| GAN_Loss: {train_gan_loss.result():.4f} | Disc_Loss: {train_disc_loss.result():.4f}')
- 
-        #ckpt_save_path = ckpt_manager.save()
-        #print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
+
+    if (epoch+1) % 5 == 0:
+        ckpt_save_path = ckpt_manager.save()
+        print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
+    
     print(f'Epoch {epoch + 1} CCE_Loss: {train_cce_loss.result():.4f} | CCE_Accuracy: {train_cce_accuracy.result():.4f}| GAN_Loss: {train_gan_loss.result():.4f} | Disc_Loss: {train_disc_loss.result():.4f}')
     print(f'VAL_CCE_Loss: {val_cce_loss.result():.4f} | VAL_CCE_Accuracy: {val_cce_accuracy.result():.4f}| VAL_GAN_Loss: {val_gan_loss.result():.4f} | VAL_Disc_Loss: {val_disc_loss.result():.4f}')
     print(f'Time taken for 1 epoch: {time.time() - start:.2f} secs\n')
