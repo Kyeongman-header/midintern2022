@@ -7,13 +7,14 @@ from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
 from tqdm import tqdm,trange
 
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
-tokenizer.add_special_tokens({
-      "eos_token": "</s>",
-        "bos_token": "<s>",
-          "unk_token": "<unk>",
+tokenizer.pad_token=tokenizer.eos_token
+"""tokenizer.add_special_tokens({
             "pad_token": "<pad>",
-              "mask_token": "<mask>"
               })
+"""
+tokenizer.pad_token_id=tokenizer.eos_token_id
+ # gpt는 기본적으로 pad 가 없고 eos와 bos 만 존재한다. 그리고 이 두 토큰을 tokenizer가 자동으로 붙여주지도 않는다.
+
 #pipeline("summarization", tokenizer=tokenizer,model=TFAutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn"),device=0)
 #pipeline("summarization", model="facebook/bart-large-cnn",device=0)
 
@@ -39,9 +40,11 @@ def createFolder(directory):
                 os.makedirs(directory)
         except OSError:
             print('Error Creating directory. ' + directory)
-def bert_summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_given_dataset=True,device=0):
-    summarizer=Summarizer()
-    #summarizer = pipeline("summarization", model="facebook/bart-large-cnn",device=device)
+def summary_maker(START=0,RANGE=10, is_abs_or_ext=False, seq_length=100,file="train",is_model_or_given_dataset=True,device=0):
+    if is_abs_or_ext :
+        summarizer = pipeline("summarization", model="facebook/bart-large-cnn",device=device)
+    else :
+        summarizer = Summarizer()
     #summarizer=pipeline("summarization", tokenizer=tokenizer,model=TFAutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn"),device=0)
     total_source=[]
     T=file
@@ -105,15 +108,17 @@ def bert_summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or
                     
                     s=summarizer(tt,max_length=200, min_length=50)
                     summary.append(s)
-                    summary_prefix_target.append(s + " : " + tt + "</s>") # result 자체가 문자열임
-                    
+                    summary_prefix_target.append("The summary is : " + s + " And the original text is : " + tt + tokenizer.eos_token) # result 자체가 문자열임
+                    # 이렇게 자연어로 된 prefix 관련 제시를 해야 성능이 좋댄다.
                 except:
                     continue
             else:
                 continue
         
-        
-    
+            
+    print("pad token id : " + str(tokenizer.pad_token_id))
+    print("bos token id : " + str(tokenizer.bos_token_id))
+    print("eos token id : " + str(tokenizer.eos_token_id))
     print("summary prefix target length :" + str(len(summary_prefix_target)))
     print("summary length : " + str(len(summary)))
     token_summary_prefix_target=tokenizer(summary_prefix_target,return_tensors="tf",padding="max_length",max_length=1024, truncation=True).input_ids
