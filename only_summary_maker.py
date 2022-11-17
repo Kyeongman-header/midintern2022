@@ -15,12 +15,25 @@ torch.cuda.device(0)
 #import os
 #os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-RANGE=consts.BATCH_SIZE * 10000 # if '0', then whole range is target.
+RANGE=consts.BATCH_SIZE * 5 # if '0', then whole range is target.
 
-TRAIN_FILE="ext_18_train"
-VALID_FILE="ext_18_valid"
+EXT_TRAIN_GPT_FILE="ext_18_train_gpt"
+EXT_VALID_GPT_FILE="ext_18_valid_gpt"
+ABS_TRAIN_GPT_FILE="abs_18_train_gpt"
+ABS_VALID_GPT_FILE="abs_18_valid_gpt"
+
+EXT_TRAIN_BART_FILE="ext_18_train_bart"
+EXT_VALID_BART_FILE="ext_18_valid_bart"
+ABS_TRAIN_BART_FILE="abs_18_train_bart"
+ABS_VALID_BART_FILE="abs_18_valid_bart"
+
 FURTHER_TRAIN=True
-bert_summary_maker(START=0,RANGE=RANGE,seq_length=18,file=TRAIN_FILE,is_model_or_given_dataset=True,device=0)
-bert_summary_maker(START=0,RANGE=RANGE,seq_length=18,file=VALID_FILE,is_model_or_given_dataset=True,device=0)
-#summary_maker(START=0,RANGE=RANGE,seq_length=18,file=TRAIN_FILE,is_model_or_given_dataset=True,device=0)
-#summary_maker(START=0,RANGE=RANGE,seq_length=18,file=VALID_FILE,is_model_or_given_dataset=True,device=0)
+bert_summary_maker(START=0,RANGE=RANGE,is_abs_or_ext=False,seq_length=18,file=EXT_TRAIN_GPT_FILE,is_model_or_given_dataset=True,device=0)
+bert_summary_maker(START=0,RANGE=RANGE,is_abs_or_ext=False,seq_length=18,file=EXT_VALID_GPT_FILE,is_model_or_given_dataset=True,device=0)
+bert_summary_maker(START=0,RANGE=RANGE,is_abs_or_ext=True,seq_length=18,file=ABS_TRAIN_GPT_FILE,is_model_or_given_dataset=True,device=0)
+bert_summary_maker(START=0,RANGE=RANGE,is_abs_or_ext=True,seq_length=18,file=ABS_VALID_GPT_FILE,is_model_or_given_dataset=True,device=0)
+
+#summary_maker(START=0,RANGE=RANGE,is_abs_or_ext=False,seq_length=18,file=EXT_TRAIN_BART_FILE,is_model_or_given_dataset=True,device=0)
+#summary_maker(START=0,RANGE=RANGE,is_abs_or_ext=False,seq_length=18,file=EXT_VALID_BART_FILE,is_model_or_given_dataset=True,device=0)
+#summary_maker(START=0,RANGE=RANGE,is_abs_or_ext=True,seq_length=18,file=ABS_TRAIN_BART_FILE,is_model_or_given_dataset=True,device=0)
+#summary_maker(START=0,RANGE=RANGE,is_abs_or_ext=True,seq_length=18,file=ABS_VALID_BART_FILE,is_model_or_given_dataset=True,device=0)

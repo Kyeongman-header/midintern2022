@@ -4,7 +4,7 @@ import numpy as np
 from transformers import pipeline
 from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
 from tqdm import tqdm,trange
-
+from summarizer import Summarizer
 tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
 #pipeline("summarization", tokenizer=tokenizer,model=TFAutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn"),device=0)
@@ -32,8 +32,11 @@ def createFolder(directory):
                 os.makedirs(directory)
         except OSError:
             print('Error Creating directory. ' + directory)
-def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_given_dataset=True,device=0):
-    summarizer = pipeline("summarization", model="facebook/bart-large-cnn",device=device)
+def summary_maker(START=0,RANGE=10,is_abs_or_ext=False, seq_length=100,file="train",is_model_or_given_dataset=True,device=0):
+    if is_abs_or_ext :
+        summarizer = pipeline("summarization", model="facebook/bart-large-cnn",device=device)
+    else :
+        summarizer = Summarizer()
     #summarizer=pipeline("summarization", tokenizer=tokenizer,model=TFAutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn"),device=0)
     total_source=[]
     T=file
@@ -94,15 +97,17 @@ def summary_maker(START=0,RANGE=10, seq_length=100,file="train",is_model_or_give
         if is_model_or_given_dataset:
             if len(tokenizer(tt).input_ids)<1024:
                 try :
-                    s=summarizer(tt,max_length=100, min_length=50, do_sample=True)
-
+                    s=summarizer(tt,max_length=200, min_length=50)
+                    if is_abs_or_ext :
+                        s=s[0]["summary_text"]
+                        
                     truncated_target.append(tt)
-                    summary.append(s[0]["summary_text"])
-                    if (len(tt.split(' '))>max_target):
-                        max_target=len(tt.split(' '))
+                    summary.append(s)
+                    #if (len(tt.split(' '))>max_target):
+                    #    max_target=len(tt.split(' '))
                     #print(max_target)
-                    if (len(s[0]["summary_text"].split(' '))>max_sum):
-                        max_sum=len(s[0]["summary_text"].split(' '))
+                    #if (len(s.split(' '))>max_sum):
+                    #    max_sum=len(s[0]["summary_text"].split(' '))
                     #print(max_sum)
                 except:
                     continue

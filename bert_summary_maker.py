@@ -40,7 +40,7 @@ def createFolder(directory):
                 os.makedirs(directory)
         except OSError:
             print('Error Creating directory. ' + directory)
-def summary_maker(START=0,RANGE=10, is_abs_or_ext=False, seq_length=100,file="train",is_model_or_given_dataset=True,device=0):
+def bert_summary_maker(START=0,RANGE=10, is_abs_or_ext=False, seq_length=100,file="train",is_model_or_given_dataset=True,device=0):
     if is_abs_or_ext :
         summarizer = pipeline("summarization", model="facebook/bart-large-cnn",device=device)
     else :
@@ -107,6 +107,9 @@ def summary_maker(START=0,RANGE=10, is_abs_or_ext=False, seq_length=100,file="tr
                 try :
                     
                     s=summarizer(tt,max_length=200, min_length=50)
+                    if is_abs_or_ext :
+                        s=s[0]["summary_text"]
+
                     summary.append(s)
                     summary_prefix_target.append("The summary is : " + s + " And the original text is : " + tt + tokenizer.eos_token) # result 자체가 문자열임
                     # 이렇게 자연어로 된 prefix 관련 제시를 해야 성능이 좋댄다.
