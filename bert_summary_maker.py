@@ -40,7 +40,7 @@ def createFolder(directory):
                 os.makedirs(directory)
         except OSError:
             print('Error Creating directory. ' + directory)
-def bert_summary_maker(START=0,RANGE=10, is_abs_or_ext=False, seq_length=100,file="train",is_model_or_given_dataset=True,device=0):
+def bert_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_length=100,file="train",is_model_or_given_dataset=True,device=0):
     if is_abs_or_ext :
         summarizer = pipeline("summarization", model="facebook/bart-large-cnn",device=device)
     else :
@@ -74,6 +74,7 @@ def bert_summary_maker(START=0,RANGE=10, is_abs_or_ext=False, seq_length=100,fil
    
     summary_prefix_target=[]
     summary=[]
+    truncated_target=[]
     #truncated_target=[]
     whole_data=[]
     #print(START)
@@ -87,13 +88,22 @@ def bert_summary_maker(START=0,RANGE=10, is_abs_or_ext=False, seq_length=100,fil
     max_sum=0
     max_target=0
     print("whole data: " + str(len(whole_data)))
+    seq_arr=[]
+
     for t in tqdm(whole_data):
         # t에서 ;이랑 .. 같은 애들 . 으로 바꿔야 겠다
         t.replace(".....",".")
         t.replace("....",".")
         t.replace("...",".")
         t.replace("..",".")
-        
+        t=t.replace(";",";.")
+        t=t.replace("!","!.")
+        t=t.replace("?","?.")
+        t=t.replace("\""," ")
+        t=t.replace("\""," ") 
+
+        seq_arr.append(len(t.split('.')))
+        # 전체 문장의 분포를 알기 위해.
         if seq_length<=0:
             tt=t
         else:
@@ -102,14 +112,15 @@ def bert_summary_maker(START=0,RANGE=10, is_abs_or_ext=False, seq_length=100,fil
             continue
         #print('len: '+str(len(tt)))
         #print(len(tokenizer(tt).input_ids))
+        _len=len(tokenizer(tt).input_ids)
         if is_model_or_given_dataset:
-            if len(tokenizer(tt).input_ids)<1024:
+            if _len<1024:
                 try :
                     
                     s=summarizer(tt,max_length=200, min_length=50)
                     if is_abs_or_ext :
                         s=s[0]["summary_text"]
-
+                    truncated_target.append(tt)
                     summary.append(s)
                     summary_prefix_target.append("The summary is : " + s + " And the original text is : " + tt + tokenizer.eos_token) # result 자체가 문자열임
                     # 이렇게 자연어로 된 prefix 관련 제시를 해야 성능이 좋댄다.
@@ -124,25 +135,50 @@ def bert_summary_maker(START=0,RANGE=10, is_abs_or_ext=False, seq_length=100,fil
     print("eos token id : " + str(tokenizer.eos_token_id))
     print("summary prefix target length :" + str(len(summary_prefix_target)))
     print("summary length : " + str(len(summary)))
+    print("truncated target length : " + str(len(truncated_target)))
     token_summary_prefix_target=tokenizer(summary_prefix_target,return_tensors="tf",padding="max_length",max_length=1024, truncation=True).input_ids
     print("tokn summary prefix target shape : ")
     print(token_summary_prefix_target.shape)
-    
+    token_target=tokenizer(truncated_target,return_tensors="tf",padding="max_length", max_length=1024,truncation=True).input_ids
+    print("tokn target shape : ")
+    print(token_target.shape)
 
     npsummary=np.array(summary)
     #nptarget=np.array(truncated_target)
     nptoken_summary_prefix_target=token_summary_prefix_target.numpy()
+    nptoken_target=token_target.numpy()
     
     createFolder("npdata/"+file)
 
     print("is this npdata exists already? => ")
     print(os.path.isfile("./npdata/"+file+"/summary.npy"))
+    
     if os.path.isfile("./npdata/"+file+"/summary.npy"):
         past=np.load("./npdata/"+file+"/summary.npy")
         npsummary=np.concatenate((past,npsummary),axis=0)
     np.save("./npdata/"+file +"/summary",npsummary)
+    
     if os.path.isfile("./npdata/"+file+"/token_summary_prefix_target.npy"):
         past=np.load("./npdata/"+file+"/token_summary_prefix_target.npy")
         nptoken_summary_prefix_target=np.concatenate((past,nptoken_summary_prefix_target),axis=0)
     np.save("./npdata/"+file +"/token_summary_prefix_target",nptoken_summary_prefix_target)
     
+    if os.path.isfile("./npdata/"+file+"/token_target.npy"):
+        past=np.load("./npdata/"+file+"/token_target.npy")
+        nptoken_target=np.concatenate((past,nptoken_target),axis=0)
+    np.save("./npdata/"+file +"/token_target",nptoken_target)
+
+    if report:
+        a=np.array(seq_arr)
+    
+        print("-----$$------")
+        print("mean : " + str(np.mean(a)))
+        print("variance : " +str(np.var(a)))
+        print("std : " + str(np.std(a)))
+        print("median : " + str(np.median(a)))
+        print("bincount : " + str(np.bincount(a).argmax()))
+        print("min : " + str(np.min(a)))
+        print("1 quantile : " + str(np.quantile(a,0.25)))
+        print("2 quantile : " + str(np.quantile(a,0.5)))
+        print("3 quantile : " + str(np.quantile(a,0.75)))
+        print("max : " + str(np.max(a)))
