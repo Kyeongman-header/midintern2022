@@ -9,8 +9,9 @@ import numpy as np
 import torch
 
 
-training_RANGE=consts.BATCH_SIZE*10000
-RANGE=consts.BATCH_SIZE*7500
+training_RANGE=consts.BATCH_SIZE*272,600
+RANGE=consts.BATCH_SIZE*15620 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
+# 실제는 좀 더 적다.
 
 
 TRAIN_FILE="ext_18_train"
@@ -61,7 +62,7 @@ config = GPT2Config(
 gpt = TFGPT2LMHeadModel.from_pretrained("gpt2")
 gpt_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
 
-filename="EXTRACTIVE_PRET_18"
+filename="EXTRACTIVE_PRET_WHOLE"
 #ckpt_manager=model_saver(gpt,gpt_optimizer,filename=filename)
 SCL=SparseCategorical_Loss(LAMBDA=consts.LAMBDA,PAD=tokenizer.pad_token_id)
 loss= tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
@@ -105,7 +106,7 @@ wr.writerow(['original','summary','article_g','bleu'])
 f2=open(filename+"_history.csv",'w',newline='')
 wr2=csv.writer(f2)
 
-for epoch in trange(20): # 20회씩.
+for epoch in trange(100): # 20회씩.
     if (epoch+1) % 5==0 :
     #if epoch>=0:
         c=0
@@ -128,7 +129,7 @@ for epoch in trange(20): # 20회씩.
     history=gpt.fit(x={"input_ids":inp[:,:-1]},y=inp[:,1:],
             
             validation_data=({"input_ids" : val_inp[:,:-1]},val_inp[:,1:]),
-            batch_size=consts.BATCH_SIZE, epochs=4,
+            batch_size=consts.BATCH_SIZE,
             callbacks=[tensorboard_callback,checkpoint,])
         #callbacks=[tensorboard_callback,checkpoint,stop_early])
     #print(history)
