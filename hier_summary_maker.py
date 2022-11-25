@@ -36,26 +36,30 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
 
     RANGE=800
 
-    # total_source=[]
-    # total_target=[]
-    #f = open('tor_fictions.csv', 'r', encoding='utf-8')
-    #rdr = csv.reader(f)
-    # print(rdr)
-    #for line in rdr:
+    #total_source=[]
+    
+    total_target=[]
+    f = open('bookrix_fictions.csv', 'r', encoding='utf-8')
+    rdr = csv.reader(f)
+    print(rdr)
+    for line in rdr:
         #total_target.append(print(line[1]))
-    #       total_source.append(line[1])
-    #       total_target.append(line[2])
+        #total_source.append(line[1])
+        total_target.append(line[1])
             #input()
         
 
     #f.close()
     #print(len(total_target))
-    T=file
-    if "train" in file:
-        T="train"
-    elif "valid" in file:
-        T="valid"
     
+    
+    #T=file
+    #if "train" in file:
+    #    T="train"
+    #elif "valid" in file:
+    #    T="valid"
+    
+    """
     total_source=[]
     with open("writingPrompts/"+ T +".wp_source", encoding='UTF8') as f:
        stories = f.readlines()
@@ -74,8 +78,16 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
        for story in stories:
            temp_stories.append(story.replace("<newline>",""))
        total_target.append(temp_stories)
+    """
 
-    seq_length=0
+    #if RANGE != 0:
+    #    whole_data=total_target[0][START:START+RANGE]
+    #else:
+    #    whole_data=total_target[0]
+    if RANGE !=0:
+        whole_data=tota_target[START:START+RANGE]
+    else:
+        whole_data=total_target
 
     token_len=[]
     seq_len=[]
@@ -87,11 +99,6 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
     mother_token_len=[]
     mother_seq_len=[]
     mother_word_len=[]
-
-    if RANGE != 0:
-        whole_data=total_target[0][START:START+RANGE]
-    else:
-        whole_data=total_target[0]
 
     #whole_target=total_target[:RANGE]
     #whole_source=total_source[:RANGE]
@@ -109,28 +116,44 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
     middle_target_set=[]
 
     c=0
+    seq_length=0
     for t in tqdm(whole_data):
             # t에서 ...은 다 없애야
-            c=c+1
-            continue_flag=False
-            t=t.replace("......",".")
-            t=t.replace(".....",".")
-            t=t.replace("....",".")
-            t=t.replace("...",".")
+            t=t.split(' ')
+            num=1
+            while len(t)-5000*num >0:
+                num=num+1
+            
+                c=c+1
+                continue_flag=False
+                t=t.replace("......",".")
+                t=t.replace(".....",".")
+                t=t.replace("....",".")
+                t=t.replace("...",".")
             t=t.replace("..",".")
             t=t.replace(";",";.")
             t=t.replace("!","!.")
             t=t.replace("?","?.")
             t=t.replace("\""," ")
-            t=t.replace("\""," ")
-            if seq_length<=0:
-                tt=t
-            else:
-                tt=('.').join(t.split('.')[:seq_length])
+            t=t.replace("\'"," ")
+            
+            #if seq_length<=0:
+            #    tt=t
+            #else:
+            #    tt=('.').join(t.split('.')[:seq_length])
+            # seq length로 조절하는 것은 무의미하고,
+            # 그 전에 words 개수로 '자른다'
+
+            tt=(' ').join(t.split(' ')[:5000])
+            
+
+
             if len(tt)==0:
                 continue
+            
             #print(tt)
             #print('len: '+str(len(tt)))
+
             tl=len(tokenizer(tt).input_ids)
             sl=len(tt.split('.'))
             wl=len(tt.split(' '))
@@ -174,7 +197,7 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
             mt_summary=[]
             middle_summary=""
             if len(middle_target) > 5: # 매우 긴 글 중에서는 middle target이 23개나 되는 애도 있다...
-                print("middle target length is over than 10")
+                print("middle target length is over than 5")
                 continue
 
             for mt in middle_target:
@@ -182,7 +205,7 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
                 middle_seq_len.append(len(mt.split('.')))
                 middle_word_len.append(len(mt.split(' ')))
                 try :
-                    s=summarizer(mt,max_length=200, min_length=50)
+                    s=summarizer(mt,max_length=200, min_length=150)
                     if is_abs_or_ext :
                         s=s[0]["summary_text"]
                     
@@ -210,7 +233,7 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
                 continue
             
             for i in len(middle_target):
-                final_summary_prefix_target.append("The mother plot is : " + mother_plot + " and the page is : " + str(i) + " and the summary text is : " + mt_summary[i] + " and the original text is : " + middle_target[i])
+                final_summary_prefix_target.append("The mother plot is : " + mother_plot + " and the page is : " + str(num+i) + " and the summary text is : " + mt_summary[i] + " and the original text is : " + middle_target[i])
             # GPT 학습을 위한 prefix 데이터셋을 생성한다.
 
             # middle_target-> original target이 분할됨, mt_summary->분할된 미들 서머리들, middle_summary-> middle summary 통째, 
