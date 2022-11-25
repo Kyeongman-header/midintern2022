@@ -85,7 +85,7 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
     #else:
     #    whole_data=total_target[0]
     if RANGE !=0:
-        whole_data=tota_target[START:START+RANGE]
+        whole_data=total_target[START:START+RANGE]
     else:
         whole_data=total_target
 
@@ -121,8 +121,13 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
             # t에서 ...은 다 없애야
             t=t.split(' ')
             num=1
-            while len(t)-5000*num >0:
-                num=num+1
+            while len(t)-(1000*(num-1)+3000) >0: # 5000개 단위로 잘라서 학습하지만,
+                # 3000자가 이상 남았으면 그냥 걔도 학습한다. 
+                # 불행히도, 예를 들어 11000자 였으면 마지막 1000자는 잘려서 학습에 포함되지 않는 문제가 있다.
+                # 5000n+3000까지는 학습에 포함된다.
+                # 그렇게 안하면, mother plot이 생성해 내는 middle target이 너무 짧을 수도 있다.
+                # 이걸 fully cover 하려면 전체 트레이닝 대상에 따라 데이터셋 트리가 변동되는 구조가 만들어져야 한다.
+                num=num+5 # num은 1000개 단위씩, 5000씩 올라간다.
             
                 c=c+1
                 continue_flag=False
@@ -130,137 +135,153 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
                 t=t.replace(".....",".")
                 t=t.replace("....",".")
                 t=t.replace("...",".")
-            t=t.replace("..",".")
-            t=t.replace(";",";.")
-            t=t.replace("!","!.")
-            t=t.replace("?","?.")
-            t=t.replace("\""," ")
-            t=t.replace("\'"," ")
-            
-            #if seq_length<=0:
-            #    tt=t
-            #else:
-            #    tt=('.').join(t.split('.')[:seq_length])
-            # seq length로 조절하는 것은 무의미하고,
-            # 그 전에 words 개수로 '자른다'
+                t=t.replace("..",".")
+                t=t.replace(";",";.")
+                t=t.replace("!","!.")
+                t=t.replace("?","?.")
+                t=t.replace("\""," ")
+                t=t.replace("\'"," ")
+                
+                #if seq_length<=0:
+                #    tt=t
+                #else:
+                #    tt=('.').join(t.split('.')[:seq_length])
+                # seq length로 조절하는 것은 무의미하고,
+                # 그 전에 words 개수로 '자른다'
 
-            tt=(' ').join(t.split(' ')[:5000])
-            
+                tt=(' ').join(t.split(' ')[:4500]) # 실제로는 5000단어를 다 쓸 수도 없다.
+                # 예를 들어 900, 1000, 900, 900, 1000, 300, 이렇게 잘릴 수도 있다!
+                # 이 경우 middle summary가 너무 길어짐!
+                # 개선점은? dataset을 sampling?
+                
+                
 
 
-            if len(tt)==0:
-                continue
-            
-            #print(tt)
-            #print('len: '+str(len(tt)))
+                if len(tt)==0:
+                    continue
+                
+                #print(tt)
+                #print('len: '+str(len(tt)))
 
-            tl=len(tokenizer(tt).input_ids)
-            sl=len(tt.split('.'))
-            wl=len(tt.split(' '))
-            seq_len.append(sl)
-            token_len.append(tl)
-            word_len.append(wl)
-            #print("---$$---")
-            #print("sl: " + str(sl))
-            #print("wl: "+str(wl))
-            #print("tl: "+str(tl))
+                tl=len(tokenizer(tt).input_ids)
+                sl=len(tt.split('.'))
+                wl=len(tt.split(' '))
+                seq_len.append(sl)
+                token_len.append(tl)
+                word_len.append(wl)
+                #print("---$$---")
+                #print("sl: " + str(sl))
+                #print("wl: "+str(wl))
+                #print("tl: "+str(tl))
 
-            ### 최대 1024 토큰 이하가 되도록 덩어리 나누기.
-            seq=[0]
-            l=0
-            count=0
-            for split in tt.split('.'):
-                count=count+1
-                tokens=tokenizer(split).input_ids
-                l=l+len(tokens)
-                if l>=1024:
-                    seq.append(count)
-                    l=len(tokens)
-            seq.append(count)
-            ### seq엔 나눠진 덩이리들(문장의 인덱스)가 있음
-            
-            
-            middle_target=[]
-            for i in range(len(seq)):
-                if i>0:
-                    mt=('.').join(tt.split('.')[seq[i-1]:seq[i]])
-                    if(len(tokenizer(mt).input_ids)>1023):
-                        continue_flag=True
+                ### 최대 1024 토큰 이하가 되도록 덩어리 나누기.
+                seq=[0]
+                l=0
+                count=0
+                for split in tt.split('.'):
+                    count=count+1
+                    tokens=tokenizer(split).input_ids
+                    l=l+len(tokens)
+                    if l>=1024:
+                        seq.append(count)
+                        l=len(tokens)
+                    # if len(seq)>=6:
+                    #     # 5 덩어리에서 끊는다.
+                    #     break
+                # if len(seq)<6: # 5 덩어리가 채 안된 경우에만 마지막 문장을 추가해준다.
+                seq.append(count)
+                ### seq엔 나눠진 덩이리들(문장의 인덱스)가 있음
+                
+                
+                middle_target=[]
+                for i in range(len(seq)):
+                    if i>0:
+                        mt=('.').join(tt.split('.')[seq[i-1]:seq[i]])
+                        if(len(tokenizer(mt).input_ids)>1023):
+                            continue_flag=True
 
-                    #print("each middel target token length : " + str(len(tokenizer(mt).input_ids)))
-                    middle_target.append(mt)
-            
-            if continue_flag:
-                continue
-            #print("middle target length : "+str(len(middle_target)))
-            
-            mt_summary=[]
-            middle_summary=""
-            if len(middle_target) > 5: # 매우 긴 글 중에서는 middle target이 23개나 되는 애도 있다...
-                print("middle target length is over than 5")
-                continue
+                        #print("each middel target token length : " + str(len(tokenizer(mt).input_ids)))
+                        if(len(tokenizer(mt).input_ids)<250):
+                            continue # 코드가 마지막에 당연히 아주 짧은 덩어리가 남을 수 있는데 이거는 걍 버린다. 
+                        # 혹은,좋은 엔딩을 학습시키기 위해서는 마지막 부분을 반드시 포함시키고, 오히려 처음 부분에 이런 짧은 덩어리가 생기도록
+                        # 해야 할 수도 있다.
 
-            for mt in middle_target:
-                middle_token_len.append(len(tokenizer(mt).input_ids))
-                middle_seq_len.append(len(mt.split('.')))
-                middle_word_len.append(len(mt.split(' ')))
+                        middle_target.append(mt)
+                
+                if continue_flag:
+                    continue
+                #print("middle target length : "+str(len(middle_target)))
+                
+                mt_summary=[]
+                middle_summary=""
+                if len(middle_target) > 5: # 구조상 나오면 안되지만, 혹시 모르니까.
+                    print("middle target length is over than 5")
+                    continue
+
+                for mt in middle_target:
+                    middle_token_len.append(len(tokenizer(mt).input_ids))
+                    middle_seq_len.append(len(mt.split('.')))
+                    middle_word_len.append(len(mt.split(' ')))
+                    try :
+                        s=summarizer(mt,max_length=200, min_length=150)
+                        if is_abs_or_ext :
+                            s=s[0]["summary_text"]
+                        
+                        middle_summary=middle_summary+". "+s
+                        #mt_summary.append(s)
+                        
+                    except:
+                        continue
+                if len(tokenizer(middle_summary).input_ids)>1023 or len(tokenizer(middle_summary).input_ids)<300:
+                    print("too short middle summary.")
+                    continue
+                
+                #print("middle_summary len: " + str(len(tokenizer(middle_summary).input_ids)))
                 try :
-                    s=summarizer(mt,max_length=200, min_length=150)
+                    
+                    mother_plot=summarizer(middle_summary,max_length=200, min_length=50)
+
                     if is_abs_or_ext :
-                        s=s[0]["summary_text"]
+                        mother_plot=mother_plot[0]["summary_text"]
                     
-                    middle_summary=middle_summary+". "+s
-                    #mt_summary.append(s)
-                    
+                    middle_summary_prefix_target.append("This is the most abstract plot. " + "The summary text is : " + mother_plot + " and the original text is : " + middle_summary) 
+                    # GPT 학습을 위한 PREFIX 데이터셋을 생성한다.
+
+                    mother_token_len.append(len(tokenizer(mother_plot).input_ids))
+                    mother_seq_len.append(len(mother_plot.split('.')))
+                    mother_word_len.append(len(mother_plot.split(' ')))
                 except:
                     continue
-            if len(tokenizer(middle_summary).input_ids)>1023:
-                continue
-            #print("middle_summary len: " + str(len(tokenizer(middle_summary).input_ids)))
-            try :
-                mother_plot=summarizer(middle_summary,max_length=200, min_length=50)
-
-                if is_abs_or_ext :
-                    mother_plot=mother_plot[0]["summary_text"]
                 
-                middle_summary_prefix_target.append("The summary text is : " + mother_plot + " and the original text is : " + middle_summary) 
-                # GPT 학습을 위한 PREFIX 데이터셋을 생성한다.
+                for i in len(middle_target):
+                    final_summary_prefix_target.append("This is the second abstract plot. " + "The mother plot is : " + mother_plot + " and the page is : " + str(num+i) + " and the summary text is : " + mt_summary[i] + " and the original text is : " + middle_target[i])
+                # GPT 학습을 위한 prefix 데이터셋을 생성한다.
 
-                mother_token_len.append(len(tokenizer(mother_plot).input_ids))
-                mother_seq_len.append(len(mother_plot.split('.')))
-                mother_word_len.append(len(mother_plot.split(' ')))
-            except:
-                continue
-            
-            for i in len(middle_target):
-                final_summary_prefix_target.append("The mother plot is : " + mother_plot + " and the page is : " + str(num+i) + " and the summary text is : " + mt_summary[i] + " and the original text is : " + middle_target[i])
-            # GPT 학습을 위한 prefix 데이터셋을 생성한다.
+                # middle_target-> original target이 분할됨, mt_summary->분할된 미들 서머리들, middle_summary-> middle summary 통째, 
+                # mother_plot -> 최종 서머리, 가 전부 준비되었으므로, 데이터셋을 통째로 만든다.
+                # middel_summary가 1차적인 decoder input이 된다.
+                # mother_plot이 1차적인 encoder input이 된다.
+                # mt_summary가 각각 2차적인 encoder input이 된다.
+                # middle_target이 각각 2차적인 decoder input이 된다.
 
-            # middle_target-> original target이 분할됨, mt_summary->분할된 미들 서머리들, middle_summary-> middle summary 통째, 
-            # mother_plot -> 최종 서머리, 가 전부 준비되었으므로, 데이터셋을 통째로 만든다.
-            # middel_summary가 1차적인 decoder input이 된다.
-            # mother_plot이 1차적인 encoder input이 된다.
-            # mt_summary가 각각 2차적인 encoder input이 된다.
-            # middle_target이 각각 2차적인 decoder input이 된다.
-
-            #if len(seq)<=10:
-            #    for i in range(11-len(seq)):
-            #        mt_summary.append("<pad>")
-            #        middle_target.append("<pad>")
-                    # 강제로 10개가 되도록 맞춰준다.
-            
-            whole_summary_set.append(mother_plot)
-            #whole_target_set.append(middle_summary)
-            #middle_summary_set.append(mt_summary[:10]) # 아마 10개를 넘는 녀석은 없겠지만, 혹시 모르니 해준다.
-            #middle_target_set.append(middle_target[:10])
-            #real_summary_set.append(whole_source[c-1])
-            # 차원을 통일해야 한다
-            # 어차피 저장하는건 token이다. 
-            # whole summary set, whole target set은 예전에 하듯이 토큰 만들면  된다. (size, 1024)와 (size, 100)이 나올거다
-            # middle summary set은 기본적으로 [["~","~",...], ["~",~~] ] 이런 구조이다. 타겟도 마찬가지.
-            # 얘네도 차원을 통일해 줘야 한다. 내부적으로 차원이 10개씩으로 반드시 맞추고,
-            # 최종적으로 (size, 10, 100)이랑 (size,10,1024)가 나와야 한다.
-            # 당연하지만 각각의 셋은 10개를 못넘는 애들도 있을 거다(10개를 넘는 애는 없을듯) 이런 애들은 "<pad>" 배열이라도 넣어야 한다.
+                #if len(seq)<=10:
+                #    for i in range(11-len(seq)):
+                #        mt_summary.append("<pad>")
+                #        middle_target.append("<pad>")
+                        # 강제로 10개가 되도록 맞춰준다.
+                
+                whole_summary_set.append(mother_plot)
+                #whole_target_set.append(middle_summary)
+                #middle_summary_set.append(mt_summary[:10]) # 아마 10개를 넘는 녀석은 없겠지만, 혹시 모르니 해준다.
+                #middle_target_set.append(middle_target[:10])
+                #real_summary_set.append(whole_source[c-1])
+                # 차원을 통일해야 한다
+                # 어차피 저장하는건 token이다. 
+                # whole summary set, whole target set은 예전에 하듯이 토큰 만들면  된다. (size, 1024)와 (size, 100)이 나올거다
+                # middle summary set은 기본적으로 [["~","~",...], ["~",~~] ] 이런 구조이다. 타겟도 마찬가지.
+                # 얘네도 차원을 통일해 줘야 한다. 내부적으로 차원이 10개씩으로 반드시 맞추고,
+                # 최종적으로 (size, 10, 100)이랑 (size,10,1024)가 나와야 한다.
+                # 당연하지만 각각의 셋은 10개를 못넘는 애들도 있을 거다(10개를 넘는 애는 없을듯) 이런 애들은 "<pad>" 배열이라도 넣어야 한다.
 
 
 
