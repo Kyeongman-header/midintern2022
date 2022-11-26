@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import tensorflow as tf
 import os
 import numpy as np
@@ -365,3 +367,5 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
         analyze(i,"mother_seq_len")
         analyze(h,"mother_token_len")
         analyze(j,"mother_word_len")
+
+hier_summary_maker(0,0,report=True,is_abs_or_ext=False,file="sample_bookrik")
