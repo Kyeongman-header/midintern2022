@@ -89,18 +89,24 @@ def bert_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
     max_target=0
     print("whole data: " + str(len(whole_data)))
     seq_arr=[]
+    lens=[]
 
     for t in tqdm(whole_data):
         # t에서 ;이랑 .. 같은 애들 . 으로 바꿔야 겠다
-        t.replace(".....",".")
-        t.replace("....",".")
-        t.replace("...",".")
-        t.replace("..",".")
+        t=t.replace(".....",".")
+        t=t.replace("....",".")
+        t=t.replace("...",".")
+        t=t.replace("..",".")
         t=t.replace(";",";.")
         t=t.replace("!","!.")
         t=t.replace("?","?.")
         t=t.replace("\""," ")
         t=t.replace("\""," ") 
+        t=t.replace('“'," ")
+        t=t.replace('”'," ")
+        t=t.replace('"'," ")
+        t=t.replace("*","")
+
 
         seq_arr.append(len(t.split('.')))
         # 전체 문장의 분포를 알기 위해.
@@ -112,12 +118,14 @@ def bert_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
             continue
         #print('len: '+str(len(tt)))
         #print(len(tokenizer(tt).input_ids))
+
         _len=len(tokenizer(tt).input_ids)
+        #print(_len)
         if is_model_or_given_dataset:
-            if _len<1024:
+            if _len<1024 or _len>200:
                 try :
-                    
-                    s=summarizer(tt,max_length=200, min_length=50)
+                    lens.append(_len)
+                    s=summarizer(tt)
                     if is_abs_or_ext :
                         s=s[0]["summary_text"]
                     truncated_target.append(tt)
@@ -140,13 +148,17 @@ def bert_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
     print("tokn summary prefix target shape : ")
     print(token_summary_prefix_target.shape)
     token_target=tokenizer(truncated_target,return_tensors="tf",padding="max_length", max_length=1024,truncation=True).input_ids
-    print("tokn target shape : ")
+    print("token target shape : ")
     print(token_target.shape)
+    token_summary=tokenizer(summary,return_tensors="tf",padding="max_length", max_length=200,truncation=True).input_ids
+    print("token_summary shape : ")
+    print(token_summary.shape)
 
     npsummary=np.array(summary)
     #nptarget=np.array(truncated_target)
     nptoken_summary_prefix_target=token_summary_prefix_target.numpy()
     nptoken_target=token_target.numpy()
+    nptoken_summary=token_summary.numpy()
     
     createFolder("npdata/"+file)
 
@@ -168,8 +180,13 @@ def bert_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
         nptoken_target=np.concatenate((past,nptoken_target),axis=0)
     np.save("./npdata/"+file +"/token_target",nptoken_target)
 
+    if os.path.isfile("./npdata/"+file+"/token_summary.npy"):
+        past=np.load("./npdata/"+file+"/token_summary.npy")
+        nptoken_summary=np.concatenate((past,nptoken_summary),axis=0)
+    np.save("./npdata/"+file +"/token_summary",nptoken_summary)
+
     if report:
-        a=np.array(seq_arr)
+        a=np.array(lens)
     
         print("-----$$------")
         print("mean : " + str(np.mean(a)))
