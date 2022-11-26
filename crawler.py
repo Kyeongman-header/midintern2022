@@ -131,7 +131,10 @@ MAX_PAGE=500
 
 for c in categories:
         for i in range(MAX_PAGE):
-                contents=page_scrapper(i,c)
+                if c=="adventure":
+                        contents=page_scrapper(i+175,c)
+                else:
+                        contents=page_scrapper(i,c)
                 time.sleep(1)
                 if contents=="end of pages":
                         break
@@ -164,4 +167,4 @@ for c in categories:
 #    print(line[2])
 #    input()
 
-#f.close()    
+f.close()    

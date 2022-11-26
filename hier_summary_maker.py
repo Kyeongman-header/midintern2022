@@ -43,15 +43,16 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
     #total_source=[]
     
     total_target=[]
-    f = open('reedsy_wp.csv', 'r', encoding='utf-8')
+    f = open('sample_reedsy_wp.csv', 'r', encoding='utf-8')
     rdr = csv.reader(f)
     # print(rdr)
     for line in rdr:
+        print(line)
         #total_target.append(print(line[1]))
         #total_source.append(line[1])
         total_target.append(line[1])
-            #input()
-        
+        input()
+    
 
     #f.close()
     #print(len(total_target))
@@ -121,10 +122,13 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
 
     c=0
     seq_length=0
+
+    print("len : " + str(len(whole_data)))
+
     for t in tqdm(whole_data):
             # t에서 ...은 다 없애야
             t=t.split(' ')
-            
+            print(t)
             
             c=c+1
             continue_flag=False
@@ -378,4 +382,4 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
         analyze(h,"mother_token_len")
         analyze(j,"mother_word_len")
 
-hier_summary_maker(0,0,report=True,is_abs_or_ext=False,file="sample_bookrik")
+hier_summary_maker(0,0,report=True,is_abs_or_ext=False,file="sample_reedsy_wp")
