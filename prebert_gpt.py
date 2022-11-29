@@ -9,8 +9,8 @@ import numpy as np
 import torch
 
 
-training_RANGE=consts.BATCH_SIZE*272,600
-RANGE=consts.BATCH_SIZE*15620 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
+training_RANGE=consts.BATCH_SIZE*272600
+RANGE=consts.BATCH_SIZE*1 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
 # 실제는 좀 더 적다.
 
 
@@ -116,7 +116,9 @@ def prefix_ver2(val_2_sum,mother_plot, i):
 def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_plots=None):
     c=0
     wr.writerow(['this is ' + str(epoch) + 'epoch generation task.'])
-    rouge_avg=0
+    r_1_avg=0
+    r_2_avg=0
+    r_l_avg=0
     outputs=[]
     for val_sum in valid_summary:
         if mother_plots==None:
@@ -130,25 +132,56 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
         # ~~~!! 적절한 prefix를 붙여줘야 한다!!
         input_ids = tokenizer.encode(val_sum, return_tensors='tf')
         # max length가 1024지, 실제로 1024개를 생성하는 경우는 없을 거다.
-        output = tokenizer.decode(model.generate(input_ids,max_length = 1024,do_sample=True,top_p=0.92,top_k=50)[0],skip_special_tokens=True) # no repeat은 dumb repeat을 방지할 수도 있다!
+        output = tokenizer.decode(model.generate(input_ids,max_length = 1000,do_sample=True,top_p=0.92,top_k=50,early_stopping=True)[0],skip_special_tokens=True) # no repeat은 dumb repeat을 방지할 수도 있다!
         original=tokenizer.decode(val_inp[c],skip_special_tokens=True)
         
         # ~~~!! prefix는 없애줘야 한다!
+        val_sum=val_sum.replace(" ,",",")
+        val_sum=val_sum.replace(" .",".")
+        val_sum=val_sum.replace(" '","'")
+        val_sum=val_sum.replace(' "','"')
+        val_sum=val_sum.replace(" n't","n't")
+        origianl=original.replace(" ,",",")
+        original=original.replace(" .",".")
+        original=original.replace(" '",".")
+        original=original.replace(' "','"')
+        original=original.replace(" n't","n't")
+        output=output.replace(" ,",",")
+        output=output.replace(" .",".")
+        output=output.replace(" '","'")
+        output=output.replace(' "','"')
+        output=output.replace(" n't","n't")
+
+        
+        #print("val_sum : "+val_sum)
+        #print("is val_sum exist : " + str(output.find(val_sum)))
+
+
         output=output.replace(val_sum,"")
-        original=original.repace(val_sum,"") # prefix 부분은 없애준다.
+        #output=output.replace("The summary is : Clancy Marguerian, 154, private first class of the 150+ army, sits in his foxhole. Rob Hall, 97, Corporal in the 50-100 army grins, as the situation turns from life or death struggle, to a meeting of two college friends. And the original text is : ","")
+        original=original.replace(val_sum,"") # prefix 부분은 없애준다.
         print("original : " + original)
         print("len of original : " + str(len(tokenizer(original).input_ids)))
         print()
         print("output : " + output)
         print("len of output : " + str(len(tokenizer(output).input_ids)))
+        
         outputs.append(output) # prefix부분은 빠진 output.
 
         
         r=rouge.get_scores(output,original,avg=True)
         #bleu=sentence_bleu([original],output)
-        rouge_avg=rouge_avg+r
+        r_1=r['rouge-1']['p']
+        r_2=r['rouge-2']['p']
+        r_l=r['rouge-l']['p']
+        r_1_avg=r_1_avg+r_1
+        r_2_avg=r_2_avg+r_2
+        r_l_avg=r_l_avg+r_l
         c=c+1
-        wr.writerow([original,val_sum,output,r])
+        print(r_1)
+        print(r_2)
+        print(r_l)
+        wr.writerow([original,val_sum,output,r_1,r_2,r_l])
             
             
     # 여기서부턴 한꺼번에 perplexity 계산.
@@ -199,25 +232,25 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
                 # print(target_ids.shape) # [[]]
                 # input()
 
-        outputs = model(input_ids, labels=target_ids)
+        loss = model(input_ids, labels=target_ids).loss
                 # print("outputs : ")
                 # print(outputs[0])
                 # print(outputs.loss)
-        neg_log_likelihood = outputs.loss * trg_len
+        neg_log_likelihood = loss * trg_len
 
                 # print("neg_log_likelihood : ")
                 # print(neg_log_likelihood)
         prev_end_loc = end_loc
         nlls.append(neg_log_likelihood)
 
-    ppl = tf.exp(tf.stack(nlls).sum() / end_loc)
+    ppl = tf.exp(tf.reduce_sum(tf.stack(nlls)) / end_loc)
 
     #print("ppl is : " + str(ppl))
 
     
-    wr.writerow(['this is avg rouge of generation: ' + str(rouge_avg/(round(c/10)))])
+    wr.writerow(['this is avg rouge of generation: ' + str(r_1_avg/c) + " =r1 , " + str(r_2_avg/c) + " =r2 , " + str(r_l_avg/c) + " =rl , "])
     wr.writerow(['this is avg perplexity of generation : ' + str(ppl)])   
-    return rouge_avg/(round(c/10)), ppl, outputs
+    return r_1_avg/c , r_2_avg/c ,r_l_avg/c , ppl, outputs
 
 
 import math
@@ -227,6 +260,8 @@ def splitting_output(outputs,tokenizer):
         w=round(len(tokenizer(o).input_ids)/5)
         sl=len(o.split('.'))
         seq=[0]
+        count=0
+        l=0
         for split in o.split('.'):
             count=count+1
             if len(seq)>=6:
@@ -239,6 +274,9 @@ def splitting_output(outputs,tokenizer):
                 l=len(tokens)
         seq.append(count)
         
+        #print("before")
+        #print(seq)
+        """ 
         if len(seq)>6:#6덩어리가 있는 상태.
             dist=seq[-1]-seq[-2]+1
             dist=math.ceil(dist/5)
@@ -249,23 +287,38 @@ def splitting_output(outputs,tokenizer):
                 seq[3]+=dist*3
                 seq[4]+=dist*4
                 seq[5]+=dist*5
+        """
+        if len(seq)==7: # 이게 그니까 한 문장의 길이랑 whole/5 의 길이가 비슷할 때 6덩어리가 나오는 것 같다.
+            # 그래서 최소 2000 words 이상에서 작업하는 hier는 6덩어리가 나올 일이 아예 없었던거다.
+            # 그러나 지금은 막 150단어짜리도 나오고 그러다보니깐 5로 나눈게 한 문장 길이랑 거의 비슷한 수준이다.
+            # 그러다보니 끝에 따라지 6번째 덩어리가 나오게 된다.
+            # 긴 output에 대해서는 이러한 현상이 없기 때문에, 간단히 seq[6], 즉 마지막을 seq[5]로 pull한다.
+            seq[5]=seq[6]
         
-        for i in range(len(seq)):
+        #print("after")
+        #print(seq)
+        
+        #print("whole : ")
+        #print(o)
+
+        for i in range(6):
             if i>0:
                 mt=('.').join(o.split('.')[seq[i-1]:seq[i]])
-                print("each middel target token length : " + str(len(tokenizer(mt).input_ids)))
-
+                #print("each middel target token length : " + str(len(tokenizer(mt).input_ids)))
+                print(mt)
                 five_split_outputs.append(mt)
     return five_split_outputs
 
 
 for epoch in trange(100): # 20회씩.
-    if (epoch+1) % 5==0 :
-        rouge_avg,ppl,outputs=generate_valid(model=gpt,valid_summary=valid_summary,wr=wr,epoch=epoch,tokenizer=tokenizer,val_inp=val_inp, prefix=prefix_ver1)
+    if (epoch) % 5==0 :
+        r_1_avg,r_2_avg,r_l_avg,ppl,outputs=generate_valid(model=gpt,valid_summary=valid_summary,wr=wr,epoch=epoch,tokenizer=tokenizer,val_inp=val_inp, prefix=prefix_ver1)
     #if epoch>=0:
-        print("rouge_avg : " + str(rouge_avg))
+        print("rouge_avg : " + str(r_1_avg)+" "+str(r_2_avg)+" "+str(r_l_avg))
         print("ppl : " + str(ppl))
         print("outputs num : " + str(len(outputs)))
+        #print("outputs : ")
+        #print(outputs)
         # hier 구조에서는 , 여기서 나온 outputs를 각각에 대하여 5등분하여서 valid_summary에 먹인다.
         five_split_outputs=splitting_output(outputs,tokenizer)
         print("five split outputs num : " + str(len(five_split_outputs)))
