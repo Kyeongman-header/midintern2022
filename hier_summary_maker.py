@@ -34,24 +34,27 @@ tokenizer.pad_token_id=tokenizer.eos_token_id
 
 def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_length=100,file="train",is_model_or_given_dataset=True,device=0):
     if is_abs_or_ext :
-        summarizer = pipeline("summarization", model="facebook/bart-large-cnn",device=device)
+        summarizer = pipeline("summarization", model="facebook/bart-large-cnn",device=1)
     else :
         summarizer = Summarizer()
 
-    RANGE=800
+    RANGE=0
 
     #total_source=[]
     
     total_target=[]
-    f = open('reedsy_wp.csv', 'r', encoding='utf-8')
+    f = open('reedsy_wp_3.csv', 'r', encoding='utf-8')
+    #f = open('reedsy_wp.csv', 'r',encoding='utf-8')
+    
     rdr = csv.reader(f)
-    # print(rdr)
+    
     for line in rdr:
+        #print(line)
         #total_target.append(print(line[1]))
         #total_source.append(line[1])
         total_target.append(line[1])
-            #input()
-        
+        #input()
+    
 
     #f.close()
     #print(len(total_target))
@@ -121,11 +124,21 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
 
     c=0
     seq_length=0
+
+    print("len : " + str(len(whole_data)))
+
     for t in tqdm(whole_data):
             # t에서 ...은 다 없애야
-            t=t.split(' ')
-            
-            
+            #input()
+            #print(t)
+            ppp=len(tokenizer(t).input_ids)
+            if(ppp<2000):
+                print("too short story. " + str(ppp))
+                continue
+            print("//////****************************//////")
+            #print(t)
+            #print()
+
             c=c+1
             continue_flag=False
             t=t.replace("......",".")
@@ -134,10 +147,14 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
             t=t.replace("...",".")
             t=t.replace("..",".")
             t=t.replace(";",";.")
+            t=t.replace(":",":.")
             t=t.replace("!","!.")
             t=t.replace("?","?.")
-            t=t.replace("\""," ")
-            t=t.replace("\'"," ")
+            t=t.replace('“'," ")
+            t=t.replace('”'," ")
+            t=t.replace('"'," ")
+            t=t.replace("*","")
+            #t=t.replace("\'"," ")
             
             if seq_length<=0:
                tt=t
@@ -170,6 +187,7 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
             l=0
             count=0
             Words=int(round(tl/5))
+            #print("Words: " + str(Words))
 
             for split in tt.split('.'):
                 count=count+1
@@ -185,6 +203,9 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
             
             seq.append(count)
             ### seq엔 나눠진 덩이리들(문장의 인덱스)가 있음
+            
+            #print("tl: " + str(tl))
+            #print("count : " + str(count))
             if len(seq)>6:#6덩어리가 있는 상태.
                 dist=seq[-1]-seq[-2]+1
                 dist=math.ceil(dist/5)
@@ -204,8 +225,8 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
             #             if s>0:
             #                 seq[s]+=dist*s
 
-            print("seq 배열 : ")
-            print(seq)
+            #print("seq 배열 : ")
+            #print(seq)
 
 
             
@@ -231,42 +252,55 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
                 continue
 
             for mt in middle_target:
-                middle_token_len.append(len(tokenizer(mt).input_ids))
+                token_mt=tokenizer(mt).input_ids
+                middle_token_len.append(len(token_mt))
                 middle_seq_len.append(len(mt.split('.')))
                 middle_word_len.append(len(mt.split(' ')))
-                try :
-                    s=summarizer(mt,max_length=200, min_length=150)
-                    if is_abs_or_ext :
-                        s=s[0]["summary_text"]
+                    #print("mt len : "  + str(len(tokenizer(mt).input_ids)))
+                
+                if len(token_mt)>1000 or len(token_mt)<200:
+                    print("too short final target.")
+                    continue_flag=True
+                    break
+                s=summarizer(mt) # 이 min length는 token 개수가 아니라 글자수라서 토큰 개수는 훨씬 훨씬 작다
+                    #print(s)
+                    #print(len(tokenizer(s).input_ids))
+                if is_abs_or_ext :
+                    s=s[0]["summary_text"]
                     
-                    middle_summary=middle_summary+". "+s
-                    #mt_summary.append(s)
-                    
-                except:
-                    continue
-            if len(tokenizer(middle_summary).input_ids)>1023 or len(tokenizer(middle_summary).input_ids)<300:
+                middle_summary=middle_summary+" "+s
+
+                mt_summary.append(s)
+            
+            if continue_flag:
+                continue
+
+            print("middle sumary : " + middle_summary)
+            print("len middel summary : " + str(len(tokenizer(middle_summary).input_ids)))
+            if len(tokenizer(middle_summary).input_ids)>1000 or len(tokenizer(middle_summary).input_ids)<200:                
                 print("too short middle summary.")
                 continue
             
             #print("middle_summary len: " + str(len(tokenizer(middle_summary).input_ids)))
-            try :
                 
-                mother_plot=summarizer(middle_summary,max_length=200, min_length=50)
+            mother_plot=summarizer(middle_summary)
 
-                if is_abs_or_ext :
-                    mother_plot=mother_plot[0]["summary_text"]
+            if is_abs_or_ext :
+                mother_plot=mother_plot[0]["summary_text"]
                 
-                middle_summary_prefix_target.append("This is the most abstract plot. " + "The summary text is : " + mother_plot + " and the original text is : " + middle_summary) 
+            middle_summary_prefix_target.append("This is the most abstract plot. " + "The summary text is : " + mother_plot + " and the original text is : " + middle_summary) 
                 # GPT 학습을 위한 PREFIX 데이터셋을 생성한다.
 
-                mother_token_len.append(len(tokenizer(mother_plot).input_ids))
-                mother_seq_len.append(len(mother_plot.split('.')))
-                mother_word_len.append(len(mother_plot.split(' ')))
-            except:
-                continue
+            mother_token_len.append(len(tokenizer(mother_plot).input_ids))
+            mother_seq_len.append(len(mother_plot.split('.')))
+            mother_word_len.append(len(mother_plot.split(' ')))
             
-            for i in len(middle_target):
-                final_summary_prefix_target.append("This is the second abstract plot. " + "The mother plot is : " + mother_plot + " and the page is : " + str(num+i) + " and the summary text is : " + mt_summary[i] + " and the original text is : " + middle_target[i])
+            
+            print("mother plot : " + mother_plot)
+            print("len mother plot : " + str(len(tokenizer(mother_plot).input_ids)))
+
+            for i in range(len(middle_target)):
+                final_summary_prefix_target.append("This is the second abstract plot. " + "The mother plot is : " + mother_plot + " and the page is : " + str(i) + " and the summary text is : " + mt_summary[i] + " and the original text is : " + middle_target[i])
             # GPT 학습을 위한 prefix 데이터셋을 생성한다.
 
             # middle_target-> original target이 분할됨, mt_summary->분할된 미들 서머리들, middle_summary-> middle summary 통째, 
@@ -330,18 +364,20 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
 
     createFolder("npdata/"+file)
     print(os.path.isfile("./npdata/"+file+"/mother.npy"))
-    #if os.path.isfile("./npdata/"+file+"/summary.npy"):
-    #    past=np.load("./npdata/"+file+"/summary.npy")
-    #    npsummary=np.concatenate((past,npsummary),axis=0)
+    if os.path.isfile("./npdata/"+file+"/mother.npy"):
+        past=np.load("./npdata/"+file+"/mother.npy")
+        npwhol_summary_set=np.concatenate((past,npwhole_summary_set),axis=0)
     np.save("./npdata/"+file +"/mother",npwhole_summary_set)
-    #if os.path.isfile("./npdata/"+file+"/token_summary.npy"):
-    #    past=np.load("./npdata/"+file+"/token_summary.npy")
-    #    nptoken_summary=np.concatenate((past,nptoken_summary),axis=0)
-    np.save("./npdata/"+file +"/mother_target",npmiddle_summary_prefix_target)
-    #if os.path.isfile("./npdata/"+file+"/token_target.npy"):
-    #    past=np.load("./npdata/"+file+"/token_target.npy")
-    #    nptoken_target=np.concatenate((past,nptoken_target),axis=0)
-    np.save("./npdata/"+file +"/middle_summary",npfinal_summary_prefix_target)
+
+    if os.path.isfile("./npdata/"+file+"/middle_tokens.npy"):
+        past=np.load("./npdata/"+file+"/middle_tokens.npy")
+        npmiddle_summary_prefix_target=np.concatenate((past,npmiddle_summary_prefix_target),axis=0)
+    np.save("./npdata/"+file +"/middle_tokens",npmiddle_summary_prefix_target)
+
+    if os.path.isfile("./npdata/"+file+"/final_tokens.npy"):
+        past=np.load("./npdata/"+file+"/final_tokens.npy")
+        npfinal_summary_prefix_target=np.concatenate((past,npfinal_summary_prefix_target),axis=0)
+    np.save("./npdata/"+file +"/final_tokens",npfinal_summary_prefix_target)
     #np.save("./npdata/"+file +"/middle_target",npmts)
     #np.save("./npdata/"+file +"/real_mother",npreal_whole_summary_set)
 
@@ -378,4 +414,4 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
         analyze(h,"mother_token_len")
         analyze(j,"mother_word_len")
 
-hier_summary_maker(0,0,report=True,is_abs_or_ext=False,file="sample_bookrik")
+hier_summary_maker(0,0,report=True,is_abs_or_ext=True,file="reedsy_wp")

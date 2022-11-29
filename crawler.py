@@ -118,21 +118,31 @@ page=scrap.get("https://blog.reedsy.com/short-stories/")
 soup=bs(page.text,"html.parser")
 cs=soup.select('.space-top-xs-md.space-bottom-xs-md > .space-bottom-xs-sm > a')
 categories=[]
+begin=False
 for c in cs:
-        categories.append(c.attrs['href'].split('/')[2])
+        if c.attrs['href'].split('/')[2] == 'mystery' or begin==True:
+            begin=True
+            categories.append(c.attrs['href'].split('/')[2])
+        else:
+            continue
 
 
-file="reedsy_wp"
+file="reedsy_wp_5"
 f=open(file+".csv",'w',encoding='utf-8',newline='')
 wr=csv.writer(f)
 whole_seq_length=[]
 count=1
 MAX_PAGE=500
-
+begin = False
 for c in categories:
         for i in range(MAX_PAGE):
-                contents=page_scrapper(i,c)
-                time.sleep(1)
+                if begin or i > 88:
+                    contents=page_scrapper(i,c)
+                    begin=True
+                    time.sleep(1)
+                else:
+                    continue
+
                 if contents=="end of pages":
                         break
                 else:
@@ -164,4 +174,4 @@ for c in categories:
 #    print(line[2])
 #    input()
 
-#f.close()    
+f.close()    
