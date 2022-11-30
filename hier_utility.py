@@ -5,6 +5,8 @@ import tensorflow as tf
 rouge=Rouge()
 
 def prefix_ver1(val_sum):
+    
+    # print(val_sum)
     return "The summary is : " +val_sum + " And the original text is : "
 def prefix_ver2(val_2_sum,mother_plot, i):
     return "This is the second abstract plot. " + "The mother plot is : " + mother_plot + " and the page is : " + str(i) + " and the summary text is : " + val_2_sum[i] + " and the original text is : "
@@ -17,6 +19,10 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
     r_l_avg=0
     outputs=[]
     for val_sum in valid_summary:
+
+        val_sum=tokenizer.decode(val_sum,skip_special_tokens=True)
+        # 잘못 만들었음...
+
         if mother_plots==None:
             val_sum=prefix(val_sum) 
         else :
@@ -37,16 +43,19 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
         val_sum=val_sum.replace(" '","'")
         val_sum=val_sum.replace(' "','"')
         val_sum=val_sum.replace(" n't","n't")
+        val_sum=val_sum.replace(u'\xa0',u'')
         origianl=original.replace(" ,",",")
         original=original.replace(" .",".")
         original=original.replace(" '",".")
         original=original.replace(' "','"')
         original=original.replace(" n't","n't")
+        original=original.replace(u'\xa0',u'')
         output=output.replace(" ,",",")
         output=output.replace(" .",".")
         output=output.replace(" '","'")
         output=output.replace(' "','"')
         output=output.replace(" n't","n't")
+        output=output.replace(u'\xa0',u'')
 
         
         #print("val_sum : "+val_sum)
@@ -68,9 +77,9 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
         
         r=rouge.get_scores(output,original,avg=True)
         #bleu=sentence_bleu([original],output)
-        r_1=r['rouge-1']['p']
-        r_2=r['rouge-2']['p']
-        r_l=r['rouge-l']['p']
+        r_1=r['rouge-1']['r']
+        r_2=r['rouge-2']['r']
+        r_l=r['rouge-l']['r'] # recall이 맞을 것 같다.(reference 길이가 분모가 됨.)
         r_1_avg=r_1_avg+r_1
         r_2_avg=r_2_avg+r_2
         r_l_avg=r_l_avg+r_l
@@ -79,32 +88,36 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
         print(r_2)
         print(r_l)
         wr.writerow([original,val_sum,output,r_1,r_2,r_l])
-            
-            
+    # 되는 것 확인.
+    encodings=tf.reshape(valid_summary,[1,-1])
     # 여기서부턴 한꺼번에 perplexity 계산.
-    encodings=tokenizer("\n\n".join(valid_summary),return_tensors="tf")
+    #encodings=tokenizer("\n\n".join(valid_summary),return_tensors="tf")////
     print("encoding input shape : " )
-    print(encodings.input_ids.shape) # (1,287664가 됨!! 여러 글이 한 덩어리로 합쳐짐.)
+    # print(encodings.input_ids.shape) # (1,287664가 됨!! 여러 글이 한 덩어리로 합쳐짐.)
+    print(encodings.shape)
 
     max_length = model.config.n_positions
     stride = 512
-    size=encodings.input_ids.shape[1]
+    # size=encodings.input_ids.shape[1]
+    size=encodings.shape[1]
     nlls = []
     print("model's output max_length : " + str(max_length))
-    print("input id size : " + str(encodings.input_ids.shape[1]))
+    # print("input id size : " + str(encodings.input_ids.shape[1]))
+    print("input id size : " + str(encodings.shape[1]))
     print("stride : " + str(stride))
     prev_end_loc=0
 
     # input()
 
-    for begin_loc in tqdm(range(0, size, stride)): # (0~287644)를 512씩 움직인다. 이 경우 
+    for begin_loc in (range(0, size, stride)): # (0~287644)를 512씩 움직인다. 이 경우 
         end_loc = min(begin_loc + max_length, size) 
                 # print("begin_loc : " + str(begin_loc))
                 # print("end_loc : " + str(end_loc))
 
 
         trg_len = end_loc - prev_end_loc  # may be different from stride on last loop
-        input_ids = encodings.input_ids[:, begin_loc:end_loc] # begin loc은 512씩 가는데 end_loc은 거기서부터 1024까지의 길이이기때문에
+        # input_ids = encodings.input_ids[:, begin_loc:end_loc] # begin loc은 512씩 가는데 end_loc은 거기서부터 1024까지의 길이이기때문에
+        input_ids = encodings[:, begin_loc:end_loc]
                 # 0~1024, 512~1536, 1024~2048 이런식으로 input은 겹치면서 나아간다
                 # 고로 end에서 1024만큼 뺀 부분은 -100으로 target을 설정해 줌으로써 그부분의 loss는 계산에서 제외할 수 있대(어째서지...)
                 # 그니까, 앞의 512개의 context도 전부 보면서, 뒤의 512개의 생성에 대한 perplexity를 계산하겠다는 거지. 
@@ -142,10 +155,10 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
 
     ppl = tf.exp(tf.reduce_sum(tf.stack(nlls)) / end_loc)
 
-    #print("ppl is : " + str(ppl))
+    print("ppl is : " + str(ppl))
 
     
-    wr.writerow(['this is avg rouge of generation: ' + str(r_1_avg/c) + " =r1 , " + str(r_2_avg/c) + " =r2 , " + str(r_l_avg/c) + " =rl , "])
+    #wr.writerow(['this is avg rouge of generation: ' + str(r_1_avg/c) + " =r1 , " + str(r_2_avg/c) + " =r2 , " + str(r_l_avg/c) + " =rl , "])
     wr.writerow(['this is avg perplexity of generation : ' + str(ppl)])   
     return r_1_avg/c , r_2_avg/c ,r_l_avg/c , ppl, outputs
 
@@ -192,8 +205,8 @@ def splitting_output(outputs,tokenizer):
             # 긴 output에 대해서는 이러한 현상이 없기 때문에, 간단히 seq[6], 즉 마지막을 seq[5]로 pull한다.
             seq[5]=seq[6]
         
-        #print("after")
-        #print(seq)
+        print("after")
+        print(seq)
         
         #print("whole : ")
         #print(o)
@@ -201,7 +214,7 @@ def splitting_output(outputs,tokenizer):
         for i in range(6): # 무조건 5개씩만 한다(어떤 연유로, 예를 들어 너무 짧은 output이었다거나, 해서 이상한 오류가 나도 5덩어리만 본다)
             if i>0:
                 mt=('.').join(o.split('.')[seq[i-1]:seq[i]])
-                #print("each middel target token length : " + str(len(tokenizer(mt).input_ids)))
+                print("each middel target token length : " + str(len(tokenizer(mt).input_ids)))
                 print(mt)
                 five_split_outputs.append(mt)
     return five_split_outputs

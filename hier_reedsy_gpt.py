@@ -10,7 +10,7 @@ import torch
 
 
 # train_RANGE=consts.BATCH_SIZE*20000
-valid_RANGE=consts.BATCH_SIZE*1000 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
+valid_RANGE=consts.BATCH_SIZE*1 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
 # 실제는 좀 더 적다.
 
 
@@ -124,11 +124,11 @@ if FURTHER_TRAIN :
 
 import csv
 
-f= open(filename+'.csv', 'w', newline='')
+f= open(filename+'.csv', 'w', newline='',encoding='utf-8')
 wr=csv.writer(f)
 wr.writerow(['original','summary','article_g','rouge-1','rouge-2','rouge-l'])
 #wr.writerow(['this is ' + str(10404/(round(312/10))) + ' epoch generation task.'])
-f2=open(filename+"_large.csv",'w',newline='')
+f2=open(filename+"_large.csv",'w',newline='',encoding='utf-8')
 wr2=csv.writer(f2)
 wr2.writerow(['original','summary','article_g','rouge-1','rouge-2','rouge-l'])
 
