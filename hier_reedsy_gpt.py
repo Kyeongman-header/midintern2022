@@ -80,7 +80,7 @@ filename="REEDSY_HIER"
 #ckpt_manager=model_saver(gpt,gpt_optimizer,filename=filename)
 SCL=SparseCategorical_Loss(LAMBDA=consts.LAMBDA,PAD=tokenizer.pad_token_id)
 loss= tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-from nltk.translate.bleu_score import sentence_bleu
+# from nltk.translate.bleu_score import sentence_bleu
 
 
 
@@ -109,8 +109,8 @@ checkpoint_large = tf.keras.callbacks.ModelCheckpoint(filepath="./MY_checkpoints
 #stop_early = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
 # 일단은 꺼본다.
 if FURTHER_TRAIN :
-    gpt = keras.models.load_model("/MY_checkpoints/"+filename+"/best_model")
-    gpt_large=keras.models.load_model("/MY_checkpoints/"+filename+"/best_model_large")
+    gpt = tf.keras.models.load_model("/MY_checkpoints/"+filename+"/best_model")
+    gpt_large= tf.keras.models.load_model("/MY_checkpoints/"+filename+"/best_model_large")
 
 #print("//////////////////////////")
 #print("sample:")
