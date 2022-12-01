@@ -38,12 +38,12 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
     else :
         summarizer = Summarizer()
 
-    RANGE=0
+    
 
     #total_source=[]
     
     total_target=[]
-    f = open('reedsy_wp_3.csv', 'r', encoding='utf-8')
+    f = open('reedsy_wp.csv', 'r', encoding='utf-8')
     #f = open('reedsy_wp.csv', 'r',encoding='utf-8')
     
     rdr = csv.reader(f)
@@ -288,7 +288,7 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
             if is_abs_or_ext :
                 mother_plot=mother_plot[0]["summary_text"]
                 
-            middle_summary_prefix_target.append("This is the most abstract plot. " + "The summary text is : " + mother_plot + " and the original text is : " + middle_summary) 
+            middle_summary_prefix_target.append("The most abstract summary is : " + mother_plot + " and the plot is : " + middle_summary) 
                 # GPT 학습을 위한 PREFIX 데이터셋을 생성한다.
 
             mother_token_len.append(len(tokenizer(mother_plot).input_ids))
@@ -300,7 +300,7 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
             print("len mother plot : " + str(len(tokenizer(mother_plot).input_ids)))
 
             for i in range(len(middle_target)):
-                final_summary_prefix_target.append("This is the second abstract plot. " + "The mother plot is : " + mother_plot + " and the page is : " + str(i) + " and the summary text is : " + mt_summary[i] + " and the original text is : " + middle_target[i])
+                final_summary_prefix_target.append("The most abstract summary is : " + mother_plot + " and the plot is : " + mt_summary[i] + " and the plot's sequence is " + str(i) + " and the original text is : " + middle_target[i])
             # GPT 학습을 위한 prefix 데이터셋을 생성한다.
 
             # middle_target-> original target이 분할됨, mt_summary->분할된 미들 서머리들, middle_summary-> middle summary 통째, 
@@ -339,7 +339,7 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
     print(npmiddle_summary_prefix_target.shape)
     print(npfinal_summary_prefix_target.shape)
 
-    whole_summary_set=tokenizer(whole_summary_set,return_tensors="tf",padding="max_length",max_length=200, truncation=True).input_ids
+    #whole_summary_set=tokenizer(whole_summary_set,return_tensors="tf",padding="max_length",max_length=200, truncation=True).input_ids
     #whole_target_set=tokenizer(whole_target_set,return_tensors="tf",padding="max_length",max_length=1024,truncation=True).input_ids
     #real_summary_set=tokenizer(real_summary_set,return_tensors="tf",padding="max_length",max_length=200,truncation=True).input_ids
     #mss=[]
@@ -349,12 +349,13 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
     #for m in middle_target_set:
     #    mts.append(tokenizer(m,return_tensors="tf",padding="max_length",max_length=1024, truncation=True).input_ids)
 
-    npwhole_summary_set=whole_summary_set.numpy()
+    #npwhole_summary_set=whole_summary_set.numpy()
+    npwhole_summary_set=np.array(whole_summary_set)
     #npwhole_target_set=whole_target_set.numpy()
     #npmts=np.array(mts)
     #npmss=np.array(mss)
     #npreal_whole_summary_set=real_summary_set.numpy()
-    print(npwhole_summary_set.shape)
+    #print(npwhole_summary_set.shape)
     #print(npwhole_target_set.shape)
     #print(npreal_whole_summary_set.shape)
     #print(npmss.shape)
@@ -366,7 +367,7 @@ def hier_summary_maker(START=0,RANGE=10,report=False, is_abs_or_ext=False, seq_l
     print(os.path.isfile("./npdata/"+file+"/mother.npy"))
     if os.path.isfile("./npdata/"+file+"/mother.npy"):
         past=np.load("./npdata/"+file+"/mother.npy")
-        npwhol_summary_set=np.concatenate((past,npwhole_summary_set),axis=0)
+        npwhole_summary_set=np.concatenate((past,npwhole_summary_set),axis=0)
     np.save("./npdata/"+file +"/mother",npwhole_summary_set)
 
     if os.path.isfile("./npdata/"+file+"/middle_tokens.npy"):
