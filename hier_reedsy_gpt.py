@@ -147,7 +147,7 @@ for epoch in trange(100): # 20회씩.
         # hier 구조에서는 , 여기서 나온 outputs를 각각에 대하여 5등분하여서 valid_summary에 먹인다.
         five_split_outputs=splitting_output(outputs,tokenizer)
         print("five split outputs num : " + str(len(five_split_outputs)))
-        rouge_avg,ppl,second_outputs=generate_valid(model=gpt_large,mothe_plots=valid_summary,valid_summary=five_split_outputs,wr=wr2,epoch=epoch,tokenizer=tokenizer,val_inp=valid_inp_2, prefix=prefix_ver2)
+        large_r_1_avg,large_r_2_avg,large_r_l_avg,large_ppl,large_second_outputs=generate_valid(model=gpt_large,mother_plots=valid_summary,valid_summary=five_split_outputs,wr=wr2,epoch=epoch,tokenizer=tokenizer,val_inp=valid_inp_2, prefix=prefix_ver2)
 
     history=gpt.fit(x={"input_ids":inp_1[:,:-1]},y=inp_1[:,1:],
             
