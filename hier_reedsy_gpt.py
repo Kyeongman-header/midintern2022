@@ -10,7 +10,7 @@ import torch
 
 
 # train_RANGE=consts.BATCH_SIZE*20000
-valid_RANGE=consts.BATCH_SIZE*1 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
+valid_RANGE=consts.BATCH_SIZE*5 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
 # 실제는 좀 더 적다.
 
 
@@ -73,7 +73,7 @@ config = GPT2Config(
 # 이렇게 하면 이제 PRETRAINED 된 모델을 사용하지 못한다
 gpt = TFGPT2LMHeadModel.from_pretrained("gpt2")
 gpt_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
-gpt_large=TFGPT2LMHeadModel.from_pretrained("gpt2-large")
+gpt_large=TFGPT2LMHeadModel.from_pretrained("gpt2") # large로 학습하려 했으나, 그냥 메모리에 로드 자체가 안된다....
 gpt_large_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
 
 filename="REEDSY_HIER"
@@ -136,7 +136,7 @@ from hier_utility import *
 
 
 for epoch in trange(100): # 20회씩.
-    if (epoch) % 5==0 :
+    if (epoch) % 10==0 :
         r_1_avg,r_2_avg,r_l_avg,ppl,outputs=generate_valid(model=gpt,valid_summary=valid_summary,wr=wr,epoch=epoch,tokenizer=tokenizer,val_inp=valid_inp_1, prefix=prefix_ver1)
     #if epoch>=0:
         print("rouge_avg : " + str(r_1_avg)+" "+str(r_2_avg)+" "+str(r_l_avg))
@@ -148,18 +148,21 @@ for epoch in trange(100): # 20회씩.
         five_split_outputs=splitting_output(outputs,tokenizer)
         print("five split outputs num : " + str(len(five_split_outputs)))
         large_r_1_avg,large_r_2_avg,large_r_l_avg,large_ppl,large_second_outputs=generate_valid(model=gpt_large,mother_plots=valid_summary,valid_summary=five_split_outputs,wr=wr2,epoch=epoch,tokenizer=tokenizer,val_inp=valid_inp_2, prefix=prefix_ver2)
-
+    
+    
     history=gpt.fit(x={"input_ids":inp_1[:,:-1]},y=inp_1[:,1:],
             
             validation_data=({"input_ids" : valid_inp_1[:,:-1]},valid_inp_1[:,1:]),
             batch_size=consts.BATCH_SIZE,
             callbacks=[tensorboard_callback,checkpoint,])
-
+    
+    print(history.history)
+    
     history_large=gpt_large.fit(x={"input_ids":inp_2[:,:-1]},y=inp_2[:,1:],
             
             validation_data=({"input_ids" : valid_inp_2[:,:-1]},valid_inp_2[:,1:]),
             batch_size=consts.BATCH_SIZE,
-            callbacks=[tensorboard_callback,checkpoint,])
+            callbacks=[tensorboard_callback,checkpoint_large,])
 
-    print(history.history)
+    
     print(history_large.history)

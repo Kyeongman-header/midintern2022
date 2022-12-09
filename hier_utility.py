@@ -116,7 +116,7 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
     #encodings=tf.reshape(valid_summary,[1,-1]) # 지우고 아래 주석으로 해야함
     
     # 여기서부턴 한꺼번에 perplexity 계산.
-    encodings=tokenizer("\n\n".join(valid_summary),return_tensors="tf")////
+    encodings=tokenizer("\n\n".join(valid_summary),return_tensors="tf")
     print("encoding input shape : " )
     print(encodings.input_ids.shape) # (1,287664가 됨!! 여러 글이 한 덩어리로 합쳐짐.)
     
@@ -237,8 +237,8 @@ def splitting_output(outputs,tokenizer):
             # 긴 output에 대해서는 이러한 현상이 없기 때문에, 간단히 seq[6], 즉 마지막을 seq[5]로 pull한다.
             seq[5]=seq[6]
         
-        print("after")
-        print(seq)
+        #print("after")
+        #print(seq)
         
         #print("whole : ")
         #print(o)
@@ -278,6 +278,7 @@ def splitting_output(outputs,tokenizer):
         for i in range(6): # 무조건 5개씩만 한다(어떤 연유로, 예를 들어 너무 짧은 output이었다거나, 해서 이상한 오류가 나도 5덩어리만 본다)
             if i>0:
                 mt=('.').join(o.split('.')[seq[i-1]:seq[i]])
+                mt=mt+"."
                 print("each middel target token length : " + str(len(tokenizer(mt).input_ids)))
                 print(mt)
                 five_split_outputs.append(mt)
