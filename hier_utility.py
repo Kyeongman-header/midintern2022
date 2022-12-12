@@ -116,21 +116,23 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
     #encodings=tf.reshape(valid_summary,[1,-1]) # 지우고 아래 주석으로 해야함
     
     # 여기서부턴 한꺼번에 perplexity 계산.
-    encodings=tokenizer("\n\n".join(valid_summary),return_tensors="tf")
+    #encodings=tokenizer("\n\n".join(valid_summary),return_tensors="tf")
+    val_inp=tokenizer.batch_decode(val_inp,skip_special_tokens=True)
+    encodings=tokenizer("\n\n".join(val_inp),return_tensors="tf").input_ids
     print("encoding input shape : " )
-    print(encodings.input_ids.shape) # (1,287664가 됨!! 여러 글이 한 덩어리로 합쳐짐.)
+    #print(encodings.input_ids.shape) # (1,287664가 됨!! 여러 글이 한 덩어리로 합쳐짐.)
     
-    #print(encodings.shape) # 지우고 위의 주석으로 해야함
+    print(encodings.shape) # 지우고 위의 주석으로 해야함
 
     max_length = model.config.n_positions
     stride = 512
-    size=encodings.input_ids.shape[1] 
-    #size=encodings.shape[1] # 지우고 위의 주석으로 해야함
+    #size=encodings.input_ids.shape[1] 
+    size=encodings.shape[1] # 지우고 위의 주석으로 해야함
     nlls = []
     print("model's output max_length : " + str(max_length))
-    print("input id size : " + str(encodings.input_ids.shape[1])) 
+    #print("input id size : " + str(encodings.input_ids.shape[1])) 
     
-    #print("input id size : " + str(encodings.shape[1])) # 지우고 위의 주석으로 해야함
+    print("input id size : " + str(encodings.shape[1])) # 지우고 위의 주석으로 해야함
     
     print("stride : " + str(stride))
     prev_end_loc=0
@@ -144,7 +146,8 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
 
 
         trg_len = end_loc - prev_end_loc  # may be different from stride on last loop
-        
+        if trg_len==0:
+            continue
         input_ids = encodings.input_ids[:, begin_loc:end_loc] # begin loc은 512씩 가는데 end_loc은 거기서부터 1024까지의 길이이기때문에
         
         #input_ids = encodings[:, begin_loc:end_loc] # 지우고 위의 주석으로 해야함
