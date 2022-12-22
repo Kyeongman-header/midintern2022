@@ -10,7 +10,7 @@ import torch
 
 
 # train_RANGE=consts.BATCH_SIZE*20000
-valid_RANGE=consts.BATCH_SIZE*5 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
+valid_RANGE=consts.BATCH_SIZE*100 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
 # 실제는 좀 더 적다.
 
 
@@ -71,12 +71,20 @@ config = GPT2Config(
 """
 #gpt = TFGPT2LMHeadModel(config) # 이렇게 안 하면 eos token 등등이 없는 GPT 모델을 불러온다!
 # 이렇게 하면 이제 PRETRAINED 된 모델을 사용하지 못한다
-gpt = TFGPT2LMHeadModel.from_pretrained("gpt2")
-gpt_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
-gpt_large=TFGPT2LMHeadModel.from_pretrained("gpt2") # large로 학습하려 했으나, 그냥 메모리에 로드 자체가 안된다....
-gpt_large_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
+filename="REEDSY_HIER_re"
 
-filename="REEDSY_HIER"
+if FURTHER_TRAIN:
+    gpt = TFGPT2LMHeadModel.from_pretrained("./MY_checkpoints/"+filename+"/gpt")
+    gpt_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
+    gpt_large=TFGPT2LMHeadModel.from_pretrained("./MY_checkpoints/"+filename+"/gpt_large") # large로 학습하려 했으나, 그냥 메모리에 로드 자체가 안된다....
+    gpt_large_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
+else:
+    gpt = TFGPT2LMHeadModel.from_pretrained("gpt2")
+    gpt_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
+    gpt_large=TFGPT2LMHeadModel.from_pretrained("gpt2") # large로 학습하려 했으나, 그냥 메모리에 로드 자체가 안된다....
+    gpt_large_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
+
+
 #ckpt_manager=model_saver(gpt,gpt_optimizer,filename=filename)
 SCL=SparseCategorical_Loss(LAMBDA=consts.LAMBDA,PAD=tokenizer.pad_token_id)
 loss= tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
@@ -104,14 +112,18 @@ current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 log_dir = 'logs/forth/' + filename + current_time
 
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
-checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath="./MY_checkpoints/"+filename+"/best_model",save_best_only=True)
-checkpoint_large = tf.keras.callbacks.ModelCheckpoint(filepath="./MY_checkpoints/"+filename+"/best_model_large",save_best_only=True)
+checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath="./MY_checkpoints/"+filename+"/best_model",save_weights_only=True,save_best_only=True)
+checkpoint_large = tf.keras.callbacks.ModelCheckpoint(filepath="./MY_checkpoints/"+filename+"/best_model_large",save_weights_only=True,save_best_only=True)
 #stop_early = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
-# 일단은 꺼본다.
-if FURTHER_TRAIN :
-    gpt = tf.keras.models.load_model("/MY_checkpoints/"+filename+"/best_model")
-    gpt_large= tf.keras.models.load_model("/MY_checkpoints/"+filename+"/best_model_large")
 
+# hugging face가 제공하는 save model이 있었다. 그 함수를 쓰지 않고 tf의 save 기능을 사용하니 불행히도 이상하게 오작동한다.
+# 그래도 혹시 모르니 앞으로 계속 저장은 하자.
+"""if FURTHER_TRAIN :
+    #gpt = tf.keras.models.load_model("./MY_checkpoints/"+filename+"/best_model",custom_objects={"reconstruction_accuracy_function" : SCL.reconstruction_accuracy_function,'reconstruction_loss' : SCL.reconstruction_loss})
+    #gpt_large= tf.keras.models.load_model("./MY_checkpoints/"+filename+"/best_model_large",custom_objects={"reconstruction_accuracy_function" : SCL.reconstruction_accuracy_function,'reconstruction_loss' : SCL.reconstruction_loss})
+    gpt.load_weights("./MY_checkpoints/"+filename+"/best_model")
+    gpt_large.load_weights("./MY_checkpoints/"+filename+"/best_model_large")
+"""
 #print("//////////////////////////")
 #print("sample:")
 #print(tokenizer.decode(inp[0,:-1]))
@@ -136,7 +148,7 @@ from hier_utility import *
 
 
 for epoch in trange(100): # 20회씩.
-    if (epoch) % 10==0 :
+    if (epoch+1) % 20==0 :
         r_1_avg,r_2_avg,r_l_avg,ppl,outputs=generate_valid(model=gpt,valid_summary=valid_summary,wr=wr,epoch=epoch,tokenizer=tokenizer,val_inp=valid_inp_1, prefix=prefix_ver1)
     #if epoch>=0:
         print("rouge_avg : " + str(r_1_avg)+" "+str(r_2_avg)+" "+str(r_l_avg))
@@ -157,12 +169,12 @@ for epoch in trange(100): # 20회씩.
             callbacks=[tensorboard_callback,checkpoint,])
     
     print(history.history)
-    
+    gpt.save_pretrained("./MY_checkpoints/"+filename+"/gpt") 
     history_large=gpt_large.fit(x={"input_ids":inp_2[:,:-1]},y=inp_2[:,1:],
             
             validation_data=({"input_ids" : valid_inp_2[:,:-1]},valid_inp_2[:,1:]),
             batch_size=consts.BATCH_SIZE,
             callbacks=[tensorboard_callback,checkpoint_large,])
 
-    
+    gpt_large.save_pretrained("./MY_checkpoints/"+filename+"/gpt_large")
     print(history_large.history)
