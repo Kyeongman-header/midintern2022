@@ -16,6 +16,8 @@ def prefix_ver2(val_sum,mother_plot, i):
 
 def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_plots=[]):
     c=0
+
+    
     wr.writerow(['this is ' + str(epoch) + 'epoch generation task.'])
     r_1_avg=0
     r_2_avg=0
@@ -148,9 +150,9 @@ def generate_valid(model,valid_summary,wr,epoch,tokenizer,val_inp,prefix,mother_
         trg_len = end_loc - prev_end_loc  # may be different from stride on last loop
         if trg_len==0:
             continue
-        input_ids = encodings.input_ids[:, begin_loc:end_loc] # begin loc은 512씩 가는데 end_loc은 거기서부터 1024까지의 길이이기때문에
+        #input_ids = encodings.input_ids[:, begin_loc:end_loc] # begin loc은 512씩 가는데 end_loc은 거기서부터 1024까지의 길이이기때문에
         
-        #input_ids = encodings[:, begin_loc:end_loc] # 지우고 위의 주석으로 해야함
+        input_ids = encodings[:, begin_loc:end_loc] # 지우고 위의 주석으로 해야함
 
 
                 # 0~1024, 512~1536, 1024~2048 이런식으로 input은 겹치면서 나아간다

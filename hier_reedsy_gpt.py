@@ -10,7 +10,7 @@ import torch
 
 
 # train_RANGE=consts.BATCH_SIZE*20000
-valid_RANGE=consts.BATCH_SIZE*5 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
+valid_RANGE=consts.BATCH_SIZE*100 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
 # 실제는 좀 더 적다.
 
 
@@ -71,6 +71,8 @@ config = GPT2Config(
 """
 #gpt = TFGPT2LMHeadModel(config) # 이렇게 안 하면 eos token 등등이 없는 GPT 모델을 불러온다!
 # 이렇게 하면 이제 PRETRAINED 된 모델을 사용하지 못한다
+filename="REEDSY_HIER_re"
+
 if FURTHER_TRAIN:
     gpt = TFGPT2LMHeadModel.from_pretrained("./MY_checkpoints/"+filename+"/gpt")
     gpt_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
@@ -82,7 +84,7 @@ else:
     gpt_large=TFGPT2LMHeadModel.from_pretrained("gpt2") # large로 학습하려 했으나, 그냥 메모리에 로드 자체가 안된다....
     gpt_large_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
 
-filename="REEDSY_HIER"
+
 #ckpt_manager=model_saver(gpt,gpt_optimizer,filename=filename)
 SCL=SparseCategorical_Loss(LAMBDA=consts.LAMBDA,PAD=tokenizer.pad_token_id)
 loss= tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
@@ -146,7 +148,7 @@ from hier_utility import *
 
 
 for epoch in trange(100): # 20회씩.
-    if (epoch) % 10==0 :
+    if (epoch+1) % 20==0 :
         r_1_avg,r_2_avg,r_l_avg,ppl,outputs=generate_valid(model=gpt,valid_summary=valid_summary,wr=wr,epoch=epoch,tokenizer=tokenizer,val_inp=valid_inp_1, prefix=prefix_ver1)
     #if epoch>=0:
         print("rouge_avg : " + str(r_1_avg)+" "+str(r_2_avg)+" "+str(r_l_avg))
@@ -167,12 +169,12 @@ for epoch in trange(100): # 20회씩.
             callbacks=[tensorboard_callback,checkpoint,])
     
     print(history.history)
-    gpt.save_pretrained("/MY_checkpoints/"+filename+"/gpt") 
+    gpt.save_pretrained("./MY_checkpoints/"+filename+"/gpt") 
     history_large=gpt_large.fit(x={"input_ids":inp_2[:,:-1]},y=inp_2[:,1:],
             
             validation_data=({"input_ids" : valid_inp_2[:,:-1]},valid_inp_2[:,1:]),
             batch_size=consts.BATCH_SIZE,
             callbacks=[tensorboard_callback,checkpoint_large,])
 
-    gpt_large.save_pretrained("/MY_checkpoints/"+filename+"/gpt_large")
+    gpt_large.save_pretrained("./MY_checkpoints/"+filename+"/gpt_large")
     print(history_large.history)
