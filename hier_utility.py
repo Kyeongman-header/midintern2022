@@ -4,6 +4,9 @@ import tqdm
 import tensorflow as tf
 rouge=Rouge()
 
+def prefix_ver0(val_sum):
+    return "The summary is : " + val_sum + " And the original text is : "
+
 def prefix_ver1(val_sum):
     
     # print(val_sum)
