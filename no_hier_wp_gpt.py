@@ -59,10 +59,18 @@ config = GPT2Config(
 """
 #gpt = TFGPT2LMHeadModel(config) # 이렇게 안 하면 eos token 등등이 없는 GPT 모델을 불러온다!
 # 이렇게 하면 이제 PRETRAINED 된 모델을 사용하지 못한다
-gpt = TFGPT2LMHeadModel.from_pretrained("gpt2")
-gpt_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
 
 filename="ONE_LAYER_WP"
+if FURTHER_TRAIN:
+    gpt = TFGPT2LMHeadModel.from_pretrained("./MY_checkpoints/"+filename+"/gpt")
+    gpt_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
+    
+else:
+    gpt = TFGPT2LMHeadModel.from_pretrained("gpt2")
+    gpt_optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4)
+    
+
+
 #ckpt_manager=model_saver(gpt,gpt_optimizer,filename=filename)
 SCL=SparseCategorical_Loss(LAMBDA=consts.LAMBDA,PAD=tokenizer.pad_token_id)
 loss= tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
