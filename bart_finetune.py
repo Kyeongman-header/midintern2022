@@ -7,11 +7,15 @@ import tensorflow as tf
 import os
 import numpy as np
 import torch
+from transformers import AutoTokenizer
 
 
-training_RANGE=consts.BATCH_SIZE*272600
-RANGE=consts.BATCH_SIZE*1 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
+tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
+#training_RANGE=consts.BATCH_SIZE*272600
+#RANGE=consts.BATCH_SIZE*1 # whole dataset. 물론, 이 중 1024 token을 넘거나 200 token도 안되는 애들은 날려버렸기 때문에
 # 실제는 좀 더 적다.
+
+
 
 
 # TRAIN_FILE="abs_whole_train_gpt"
@@ -46,29 +50,59 @@ FURTHER_TRAIN=False
 
 #dataset = tf.data.Dataset.from_tensor_slices((inp[:,:-1],inp[:,1:]))
 #val_dataset =  tf.data.Dataset.from_tensor_slices((val_inp[:,:-1], val_inp[:,1:]))
-T="train"
-total_source=[]
-with open("writingPrompts/"+ T +".wp_source", encoding='UTF8') as f:
-    stories = f.readlines()
-    stories = [" ".join(i.split()[0:1000]) for i in stories]
-    temp_stories=[]
-    for story in stories:
-        temp_stories.append(story.replace("<newline>",""))
-    total_source.append(temp_stories)
 
-total_target=[]
+if os.path.isfile("./npdata/"+"bartfinetune"+"/summary.npy") is not True:
+    T="train"
+    total_source=[]
+    with open("writingPrompts/"+ T +".wp_source", encoding='UTF8') as f:
+        stories = f.readlines()
+        stories = [" ".join(i.split()[0:1000]) for i in stories]
+        temp_stories=[]
+        for story in stories:
+            temp_stories.append(story.replace("<newline>",""))
+        total_source.append(temp_stories)
 
-with open("writingPrompts/"+ T +".wp_target", encoding='UTF8') as f:
-    stories = f.readlines()
-    stories = [" ".join(i.split()[0:1000]) for i in stories]
-    temp_stories=[]
-    for story in stories:
-        temp_stories.append(story.replace("<newline>",""))
-    total_target.append(temp_stories)
+    total_target=[]
+
+    with open("writingPrompts/"+ T +".wp_target", encoding='UTF8') as f:
+        stories = f.readlines()
+        stories = [" ".join(i.split()[0:1000]) for i in stories]
+        temp_stories=[]
+        for story in stories:
+            temp_stories.append(story.replace("<newline>",""))
+        total_target.append(temp_stories)
 
 
-token_target=total_target[0]
-token_summary=total_source[0]
+    token_target=tokenizer(total_target[0],return_tensors="tf",padding="max_length",max_length=1024, truncation=True).input_ids
+    token_summary=tokenizer(total_source[0],return_tensors="tf",padding="max_length",max_length=1024, truncation=True).input_ids
+
+
+    nptoken_summary=token_summary.numpy()
+    nptoken_target=token_target.numpy()
+    
+    createFolder("npdata/"+"bartfinetune")
+
+    if os.path.isfile("./npdata/"+"bartfinetune"+"/token_summary.npy"):
+        past=np.load("./npdata/"+"bartfinetune"+"/token_summary.npy")
+        nptoken_summary=np.concatenate((past,nptoken_summary),axis=0)
+    np.save("./npdata/"+"bartfinetune" +"/token_summary",nptoken_summary)
+
+    if os.path.isfile("./npdata/"+"bartfinetune"+"/token_target.npy"):
+        past=np.load("./npdata/"+"bartfinetune"+"/token_target.npy")
+        nptoken_target=np.concatenate((past,nptoken_target),axis=0)
+    np.save("./npdata/"+"bartfinetune" +"/token_target",nptoken_target)
+
+
+
+token_target=np.load("./npdata/"+"bartfinetune" +"/token_target.npy")[:]
+token_summary=np.load("./npdata/"+ "bartfinetune" +"/token_summary.npy")[:]
+token_target=tf.cast(token_target,tf.int64)
+token_summary=tf.cast(token_summary,tf.int64)
+
+
+print(token_target.shape)
+print(token_summary.shape)
+
 
 from transformers import GPT2Config,TFGPT2LMHeadModel, TFAutoModelForSeq2SeqLM
 print("vocab size : " + str(tokenizer.vocab_size)) # special token 더해준거 개수를 직접 더해야 한다...!!!
@@ -158,7 +192,7 @@ for epoch in trange(100): # 20회씩.
             batch_size=consts.BATCH_SIZE,
             callbacks=[tensorboard_callback,checkpoint,])
     
-    bart.save_pretrained("./MY_checkpoints/"+filename+"/gpt") 
+    bart.save_pretrained("./MY_checkpoints/"+filename+"/bart") 
         #callbacks=[tensorboard_callback,checkpoint,stop_early])
     #print(history)
     print(history.history)
